@@ -3,7 +3,7 @@ import { preprocess } from './preprocess.js';
 import { initOCR, recognize } from './ocr.js';
 import * as store from './store.js';
 
-export const VERSION = '0.2.1';
+export const VERSION = '0.3.0';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
@@ -77,7 +77,9 @@ function setArmed() { const f = $('frame'); f.classList.toggle('armed', armed); 
 function grabFrame() {
   // wycinek ramki z natywnej rozdzielczości wideo; object-fit:cover -> przelicz geometrię
   const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return null;
+  if (!$('v-scan').classList.contains('on')) return null; // inna zakładka: ramka ma 0 px, nie skanuj
   const el = $('cam').getBoundingClientRect(); const fr = $('frame').getBoundingClientRect();
+  if (fr.width < 10 || fr.height < 10) return null;
   const scale = Math.max(el.width / vw, el.height / vh); const offX = (vw * scale - el.width) / 2, offY = (vh * scale - el.height) / 2;
   const sx = (fr.left - el.left + offX) / scale, sy = (fr.top - el.top + offY) / scale, sw = fr.width / scale, sh = fr.height / scale;
   const w = Math.max(CFG.minWidth, Math.min(CFG.ocrWidth, Math.round(sw))), h = Math.round(sh * w / sw);
@@ -87,9 +89,14 @@ function grabFrame() {
 
 async function loop() {
   while (running) {
+    try { await step(); } catch (e) { console.log('loop error', e && e.message); await new Promise(r => setTimeout(r, 200)); }
+  }
+}
+async function step() {
+  {
     const t0 = performance.now();
     const img = grabFrame();
-    if (!img) { await new Promise(r => setTimeout(r, 100)); continue; }
+    if (!img) { await new Promise(r => setTimeout(r, 100)); return; }
     const pre = preprocess(img, 'gray', true); // szarość + przycięcie do białej naklejki; progowanie robi Tesseract (Sauvola)
     let res = { text: '', words: [], ms: 0 };
     if (pre.box) { ocrCanvas.width = pre.width; ocrCanvas.height = pre.height; ocrCtx.putImageData(new ImageData(pre.data, pre.width, pre.height), 0, 0); res = await recognize(ocrCanvas); }
@@ -137,7 +144,9 @@ let lastSku = null;
 function accept(sku, src = 'scan') {
   $('ask').classList.remove('on');
   const q = store.add(state, sku, 1, src); lastSku = sku; renderSessionName();
-  $('big').innerHTML = `${sku}<small>${q} szt. w sesji</small>`;
+  const cur = store.current(state), mode = store.modeOf(cur);
+  $('big').innerHTML = mode === 'spis' ? `${sku}<small>${q} szt. w sesji</small>`
+    : `${mode === 'wydanie' ? '−1' : '+1'} · ${sku}<small>${store.MODES[mode].label}: razem ${store.fmtQty(cur, q)}</small>`;
   const f = $('frame'); f.classList.add('hit'); setTimeout(() => f.classList.remove('hit'), 400);
   sound('scanned'); vibrate(80);
 }
@@ -158,24 +167,36 @@ function askOutside(sku, text) {
   $('askNo').onclick = () => { $('ask').classList.remove('on'); };
 }
 $('btnStart').onclick = start;
-$('btnUndo').onclick = () => { const e = store.undo(state); if (e) { toast(`Cofnięto ${e.sku}`); $('big').innerHTML = `${e.sku}<small>cofnięte · ${state.sessions.find(s => s.id === state.currentId)?.items[e.sku] || 0} szt.</small>`; } else toast('Nie ma czego cofać'); };
+$('btnUndo').onclick = () => { const e = store.undo(state); if (e) { const cur = store.current(state); toast(`Cofnięto ${e.sku}`); $('big').innerHTML = `${e.sku}<small>cofnięte · zostaje ${store.fmtQty(cur, cur.items[e.sku] || 0)}</small>`; renderSessionName(); } else toast('Nie ma czego cofać'); };
 $('btnAgain').onclick = () => { if (lastSku) accept(lastSku, 'again'); else toast('Najpierw zeskanuj coś'); };
 $('btnDbg').onclick = () => { dbg = !dbg; $('dbg').textContent = ''; };
 
 // ---------- lista ----------
-function renderSessionName() { const s = store.current(state); $('sesname').textContent = `Sesja: ${s.name}${s.expect ? ' · filtr ' + s.expect : ''} · ${store.total(s)} szt.`; }
+function renderSessionName() {
+  const s = store.current(state), mode = store.modeOf(s);
+  const el = $('sesname'); el.className = 'mode-' + mode;
+  el.textContent = `${store.MODES[mode].label.toUpperCase()} · ${s.name}${s.expect ? ' · filtr ' + s.expect : ''} · ${store.fmtQty(s, store.total(s))}`;
+}
+const MODE_HELP = {
+  spis: 'Policz wszystko, co leży na półce. Plik ustawi stan w sklepie na policzoną liczbę.',
+  przyjecie: 'Skanuj tylko przyjmowane pary. Plik doda je do stanu w sklepie.',
+  wydanie: 'Skanuj tylko wydawane pary. Plik odejmie je od stanu w sklepie.',
+};
+function modeBox(el, s) { const mode = store.modeOf(s); el.className = 'modebox mode-' + mode; el.innerHTML = `${store.MODES[mode].long}<small>${MODE_HELP[mode]}</small>`; }
 function renderList() {
   const s = store.current(state); renderSessionName();
-  const sel = $('sesSelect'); sel.innerHTML = state.sessions.map(x => `<option value="${x.id}" ${x.id === s.id ? 'selected' : ''}>${x.name} (${store.total(x)} szt.)</option>`).join('');
+  const sel = $('sesSelect'); sel.innerHTML = state.sessions.map(x => `<option value="${x.id}" ${x.id === s.id ? 'selected' : ''}>${store.MODES[store.modeOf(x)].label} · ${x.name} (${store.fmtQty(x, store.total(x))})</option>`).join('');
+  modeBox($('modeInfo'), s);
   $('expect').value = s.expect || '';
-  $('listSummary').textContent = `${Object.keys(s.items).length} SKU, ${store.total(s)} szt.`;
+  const what = { spis: 'policzone', przyjecie: 'do przyjęcia', wydanie: 'do wydania' }[store.modeOf(s)];
+  $('listSummary').textContent = `${Object.keys(s.items).length} SKU, ${store.total(s)} szt. ${what}. Przyciski −/+ zmieniają liczbę par.`;
   const rows = Object.entries(s.items).sort(([a], [b]) => a.localeCompare(b));
   $('tbl').innerHTML = rows.map(([sku, q]) => `<tr><td class="sku">${sku}</td><td class="q">${q}</td><td class="btns"><button data-sku="${sku}" data-d="-1">−</button><button data-sku="${sku}" data-d="1">+</button></td></tr>`).join('') || '<tr><td class="mut">Pusto. Skanuj albo dopisz ręcznie.</td></tr>';
   $('tbl').querySelectorAll('button').forEach(b => b.onclick = () => { store.add(state, b.dataset.sku, +b.dataset.d, 'manual'); renderList(); });
   const out = Object.entries(s.outside);
   $('tblOut').innerHTML = out.map(([k, o]) => `<tr class="outside"><td class="sku">${k}<div class="mut">${o.text.split('\n').slice(0, 7).join(' · ')}</div></td><td class="q">${o.qty}</td></tr>`).join('') || '<tr><td class="mut">—</td></tr>';
 }
-$('btnNewSes').onclick = () => { const n = $('sesInput').value.trim(); if (!n) { toast('Wpisz nazwę sesji'); return; } const s = store.newSession(state, n); s.expect = store.expectFromName(n, mapping); store.save(state); $('sesInput').value = ''; renderList(); toast('Nowa sesja: ' + n); };
+$('btnNewSes').onclick = () => { const n = $('sesInput').value.trim(); if (!n) { toast('Wpisz nazwę sesji'); return; } const mode = $('sesMode').value; const s = store.newSession(state, n, mode); s.expect = store.expectFromName(n, mapping); store.save(state); $('sesInput').value = ''; renderList(); toast(`Nowa sesja (${store.MODES[mode].label}): ${n}`); };
 $('expect').onchange = e => { const v = e.target.value.trim().toUpperCase().replace(/\s+/g, ''); if (v && !/^(101|417|419)-[A-Z0-9]{2}$/.test(v)) { toast('Format: model-materiał, np. 101-42', 2500); return; } store.current(state).expect = v; store.save(state); toast(v ? 'Filtr sesji: ' + v : 'Filtr wyłączony'); };
 $('sesSelect').onchange = e => { state.currentId = e.target.value; store.save(state); renderList(); };
 $('btnManual').onclick = () => {
@@ -188,17 +209,24 @@ $('btnDelSes').onclick = () => { const s = store.current(state); if (!confirm(`U
 // ---------- wyślij ----------
 function renderSend() {
   const s = store.current(state); $('csv').value = store.toCSV(s);
+  modeBox($('sendMode'), s);
+  const head = store.MODES[store.modeOf(s)].header;
+  $('sendInfo').innerHTML = `Plik CSV (<code>${head}</code>) z bieżącej sesji. Wklej go w sesji czatu z Shopify. Skaner nic nie zapisuje do sklepu.`;
   $('csvOut').value = Object.entries(s.outside).map(([k, o]) => `${k},${o.qty},"${o.text.replace(/\n/g, ' | ').replace(/"/g, "'")}"`).join('\n') || '';
-  $('verInfo').textContent = `Vegas Skaner ${VERSION} · sesja „${s.name}” · ${store.total(s)} szt. · lista SKU: ${skus.size}`;
+  $('verInfo').textContent = `Vegas Skaner ${VERSION} · ${store.MODES[store.modeOf(s)].label} · sesja „${s.name}” · ${store.fmtQty(s, store.total(s))} · lista SKU: ${skus.size}`;
 }
 async function copy(text) { try { await navigator.clipboard.writeText(text); toast('Skopiowane'); } catch { const ta = $('csv'); ta.select(); document.execCommand('copy'); toast('Skopiowane (zaznacz i kopiuj, jeśli nie)'); } }
 $('btnCopy').onclick = () => copy($('csv').value);
 $('btnCopyOut').onclick = () => copy($('csvOut').value);
-function csvFile() { const s = store.current(state); const name = `spis-${s.name.replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.csv`; return new File([store.toCSV(s)], name, { type: 'text/csv' }); }
+function csvFile() { const s = store.current(state); const name = `${store.MODES[store.modeOf(s)].file}-${s.name.replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.csv`; return new File([store.toCSV(s)], name, { type: 'text/csv' }); }
 $('btnDownload').onclick = () => { const f = csvFile(); const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); };
 $('btnShare').onclick = async () => { const f = csvFile(); try { if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: f.name }); else await navigator.share({ title: f.name, text: store.toCSV(store.current(state)) }); } catch (e) { if (e.name !== 'AbortError') toast('Udostępnianie niedostępne'); } };
 
-document.addEventListener('visibilitychange', () => { if (!document.hidden && audio) audio.resume().catch(() => {}); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (audio) audio.resume().catch(() => {});
+  if (running && video && video.paused) video.play().catch(() => {}); // iOS pauzuje kamerę w tle
+});
 // przełączniki dźwięków (Lista)
 document.querySelectorAll('[data-sound]').forEach(cb => {
   cb.checked = soundOn[cb.dataset.sound];

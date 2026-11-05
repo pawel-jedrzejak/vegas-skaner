@@ -54,6 +54,10 @@
   .toast { position:fixed; left:50%; top:calc(12px + var(--safe-t)); transform:translateX(-50%); background:#333; color:#fff; padding:10px 16px; border-radius:10px; font-weight:600; z-index:9; display:none; }
   .toast.on { display:block; }
   .outside { background:#2a2600; border:1px solid var(--yel); }
+  .mode-spis { background:#333; } .mode-przyjecie { background:#136b2e; } .mode-wydanie { background:#8a1515; }
+  #sesname.mode-spis, #sesname.mode-przyjecie, #sesname.mode-wydanie { color:#fff; padding:8px 10px; }
+  .modebox { border-radius:10px; padding:10px 12px; font-size:17px; font-weight:700; color:#fff; }
+  .modebox small { display:block; font-weight:400; font-size:14px; margin-top:2px; }
   .snd { display:flex; align-items:center; gap:10px; font-size:17px; } .snd label { flex:1; display:flex; align-items:center; gap:10px; }
   .snd input { width:26px; height:26px; flex:0 0 auto; } .snd button { width:54px; height:44px; font-size:18px; border-radius:10px; border:0; background:#333; color:var(--fg); }
 </style>
@@ -81,7 +85,14 @@
   <section id="v-list" class="view">
     <div class="pad">
       <div class="row"><input id="sesInput" placeholder="Nazwa sesji, np. 101 mat. 42"><button class="big" id="btnNewSes" style="flex:0 0 auto">Nowa</button></div>
+      <div class="row"><select id="sesMode">
+        <option value="spis">Tryb: Spis z natury (ustawia stan)</option>
+        <option value="przyjecie">Tryb: Przyjęcie (+ do stanu)</option>
+        <option value="wydanie">Tryb: Wydanie (− od stanu)</option>
+      </select></div>
+      <h2>Bieżąca sesja</h2>
       <div class="row"><select id="sesSelect"></select></div>
+      <div id="modeInfo" class="modebox"></div>
       <div class="row"><input id="expect" placeholder="Filtr sesji: model-materiał, np. 101-42 (puste = bez filtra)" autocapitalize="characters" autocomplete="off"></div>
       <div class="mut">Filtr: odczyt innego modelu/materiału niż w kupce wymaga stuknięcia „Dodaj mimo to”. Ustawia się sam z nazwy sesji typu „101 mat. 42”.</div>
       <div class="row"><input id="manualSku" placeholder="Ręcznie: 101-42-94-30" list="skuList" autocapitalize="characters" autocomplete="off"><button class="big grn" id="btnManual" style="flex:0 0 auto">+1</button></div>
@@ -101,7 +112,8 @@
 
   <section id="v-send" class="view">
     <div class="pad">
-      <div class="mut">Plik CSV (<code>sku,ilosc</code>) z bieżącej sesji. Wklej go w sesji czatu, a Claude wpisze stany do Shopify. Skaner nic nie zapisuje do sklepu.</div>
+      <div id="sendMode" class="modebox"></div>
+      <div class="mut" id="sendInfo"></div>
       <div class="row"><button class="big grn" id="btnCopy">Kopiuj CSV</button><button class="big" id="btnDownload">Pobierz plik</button></div>
       <button class="big" id="btnShare">Udostępnij…</button>
       <textarea id="csv" readonly></textarea>

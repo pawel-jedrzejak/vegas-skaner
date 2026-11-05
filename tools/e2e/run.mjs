@@ -21,11 +21,14 @@ const st = await page.evaluate(() => JSON.parse(localStorage.getItem('vegas-skan
 const dbg = await page.textContent('#dbg');
 await browser.close();
 const items = st.sessions.find(s => s.id === st.currentId).items;
-const got = accepts.map(a => a.line.split(' ')[2]);
+// ACCEPT ok = doliczone do sesji; ACCEPT unknown = tylko pytanie „poza sklepem” (nic nie dolicza bez stuknięcia)
+const got = accepts.filter(a => a.line.split(' ')[1] === 'ok').map(a => a.line.split(' ')[2]);
+const asked = accepts.filter(a => a.line.split(' ')[1] !== 'ok').map(a => a.line.split(' ')[2]);
 let ok = 0, bad = 0, missed = 0;
 for (const sku of expected) { const i = got.indexOf(sku); if (i >= 0) { ok++; got.splice(i, 1); } else missed++; }
 bad = got.length;
+const counted = Object.values(items).reduce((a, b) => a + b, 0);
 console.log('oczekiwane:', expected.join(' '));
 console.log('zaliczone :', accepts.map(a => a.line.replace('ACCEPT ', '') + ' @' + a.t + 'ms').join(' | '));
-console.log(`OK=${ok} BAD(nadmiarowe)=${bad} pominięte=${missed} z ${expected.length}; items=${JSON.stringify(items)}`);
+console.log(`OK=${ok} ZŁE=${bad} pytania=${asked.length}${asked.length ? ' (' + asked.join(' ') + ')' : ''} pominięte=${missed} z ${expected.length}; w sesji ${counted} szt.; items=${JSON.stringify(items)}`);
 console.log('ostatni debug:', dbg.split('\n')[0]);

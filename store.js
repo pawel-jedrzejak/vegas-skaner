@@ -1,5 +1,9 @@
-// Stan sesji spisu w localStorage. Struktura przygotowana pod przyszły tryb ruchów (+1 przyjęcie / -1 wydanie):
-// każda zmiana to wpis w log[] {t, sku, delta, src}, a items to suma. Eksport liczy z items.
+// Stan sesji w localStorage. Każda zmiana to wpis w log[] {t, sku, delta, src}, a items to suma zeskanowanych par.
+// Tryb sesji decyduje o eksporcie:
+//   spis      -> "sku,ilosc"  : policzony stan, Shopify USTAWIA stan na tę liczbę
+//   przyjecie -> "sku,zmiana" : +N, Shopify DODAJE do stanu
+//   wydanie   -> "sku,zmiana" : -N, Shopify ODEJMUJE od stanu
+// items zawsze trzyma liczbę par (dodatnią); znak dokłada eksport.
 const KEY = 'vegas-skaner-v1';
 
 export function load() {
@@ -8,8 +12,17 @@ export function load() {
 }
 export function save(state) { localStorage.setItem(KEY, JSON.stringify(state)); }
 
-export function newSession(state, name) {
-  const s = { id: Date.now().toString(36), name: name || new Date().toLocaleString('pl-PL'), created: new Date().toISOString(), mode: 'spis', items: {}, outside: {}, log: [] };
+export const MODES = {
+  spis:      { label: 'Spis',      long: 'Spis z natury', sign: 0,  header: 'sku,ilosc',  file: 'spis' },
+  przyjecie: { label: 'Przyjęcie', long: 'Przyjęcie',     sign: 1,  header: 'sku,zmiana', file: 'przyjecie' },
+  wydanie:   { label: 'Wydanie',   long: 'Wydanie',       sign: -1, header: 'sku,zmiana', file: 'wydanie' },
+};
+export function modeOf(s) { return MODES[s && s.mode] ? s.mode : 'spis'; }
+// "3 szt." w spisie, "+3" w przyjęciu, "−3" w wydaniu
+export function fmtQty(s, q) { const m = MODES[modeOf(s)]; return m.sign > 0 ? `+${q}` : m.sign < 0 ? `−${q}` : `${q} szt.`; }
+
+export function newSession(state, name, mode = 'spis') {
+  const s = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: name || new Date().toLocaleString('pl-PL'), created: new Date().toISOString(), mode: MODES[mode] ? mode : 'spis', items: {}, outside: {}, log: [] };
   state.sessions.unshift(s); state.currentId = s.id; save(state); return s;
 }
 export function current(state) {
@@ -39,8 +52,10 @@ export function undo(state) {
 }
 export function total(s) { return Object.values(s.items).reduce((a, b) => a + b, 0); }
 export function toCSV(s) {
-  const rows = Object.entries(s.items).sort(([a], [b]) => a.localeCompare(b)).map(([sku, q]) => `${sku},${q}`);
-  return ['sku,ilosc', ...rows].join('\n') + '\n';
+  const m = MODES[modeOf(s)];
+  const rows = Object.entries(s.items).sort(([a], [b]) => a.localeCompare(b))
+    .map(([sku, q]) => `${sku},${m.sign > 0 ? '+' + q : m.sign < 0 ? '-' + q : q}`);
+  return [m.header, ...rows].join('\n') + '\n';
 }
 
 // "101 mat. 42" / "419 B2" / "101-42" -> "101-42" (filtr sesji: kupka jednego modelu i materiału). null, gdy nie da się odczytać.
