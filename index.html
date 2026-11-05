@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Vegas Skaner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vegas Skaner">
+<meta name="theme-color" content="#141414">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  :root { --bg:#141414; --fg:#f2f2f2; --mut:#9a9a9a; --red:#d81e1e; --grn:#22b14c; --yel:#e6b400; --card:#222; --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px); }
+  * { box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font: 16px/1.3 -apple-system, system-ui, sans-serif; overscroll-behavior:none; }
+  body { display:flex; flex-direction:column; height:100dvh; }
+  main { flex:1; overflow:auto; -webkit-overflow-scrolling:touch; }
+  nav { display:flex; border-top:1px solid #333; padding-bottom:var(--safe-b); background:#0d0d0d; }
+  nav button { flex:1; background:none; border:0; color:var(--mut); font-size:15px; padding:12px 0 10px; }
+  nav button.on { color:var(--fg); font-weight:600; border-top:2px solid var(--red); }
+  .view { display:none; height:100%; } .view.on { display:flex; flex-direction:column; }
+  button.big { font-size:20px; padding:16px; border-radius:12px; border:0; background:#333; color:var(--fg); font-weight:600; }
+  button.big.red { background:var(--red); } button.big.grn { background:var(--grn); } button.big.yel { background:var(--yel); color:#000; }
+  button:active { filter:brightness(1.3); }
+  /* skaner */
+  #cam { position:relative; flex:1; background:#000; overflow:hidden; }
+  #video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  #frame { position:absolute; left:15%; width:70%; top:6%; height:60%; border:3px solid var(--mut); border-radius:10px; box-shadow:0 0 0 2000px rgba(0,0,0,.45); transition:border-color .15s; }
+  #frame.armed { border-color:var(--grn); } #frame.locked { border-color:var(--yel); } #frame.hit { border-color:var(--grn); box-shadow:0 0 0 2000px rgba(0,0,0,.45), 0 0 30px var(--grn); }
+  #big { position:absolute; left:0; right:0; top:68%; text-align:center; font-size:30px; font-weight:800; text-shadow:0 2px 8px #000; padding:0 8px; }
+  #big small { display:block; font-size:16px; font-weight:400; color:#ddd; }
+  #hint { position:absolute; left:0; right:0; bottom:8px; text-align:center; color:#ddd; font-size:14px; text-shadow:0 1px 4px #000; padding:0 8px; }
+  #dbg { position:absolute; left:4px; top:calc(4px + var(--safe-t)); font:11px/1.2 monospace; color:#9f9; white-space:pre; text-shadow:0 1px 2px #000; pointer-events:none; }
+  #ask { position:absolute; left:8px; right:8px; bottom:56px; background:rgba(30,30,30,.96); border:2px solid var(--yel); border-radius:12px; padding:12px; display:none; }
+  #ask.on { display:block; } #ask .row { display:flex; gap:8px; margin-top:10px; } #ask .row button { flex:1; }
+  #scanbar { display:flex; gap:8px; padding:8px; background:#0d0d0d; }
+  #scanbar button { flex:1; font-size:17px; padding:12px 6px; }
+  #sesname { font-weight:600; color:var(--mut); padding:6px 10px 0; font-size:14px; }
+  #start { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(0,0,0,.85); padding:20px; text-align:center; }
+  #start p { color:var(--mut); margin:0; max-width:320px; }
+  /* lista */
+  .pad { padding:12px; display:flex; flex-direction:column; gap:10px; }
+  table { width:100%; border-collapse:collapse; } td { padding:8px 4px; border-bottom:1px solid #2a2a2a; font-size:18px; }
+  td.sku { font-family: ui-monospace, Menlo, monospace; font-weight:600; } td.q { text-align:right; font-weight:700; width:48px; }
+  td.btns { width:120px; text-align:right; white-space:nowrap; } td.btns button { width:50px; height:44px; font-size:22px; border-radius:10px; border:0; background:#333; color:var(--fg); margin-left:6px; }
+  input, select { font-size:18px; padding:12px; border-radius:10px; border:1px solid #444; background:#1a1a1a; color:var(--fg); width:100%; }
+  .row { display:flex; gap:8px; } .row > * { flex:1; }
+  h2 { font-size:18px; margin:8px 0 0; color:var(--mut); font-weight:600; }
+  .mut { color:var(--mut); font-size:14px; }
+  textarea { width:100%; min-height:160px; font: 14px/1.4 ui-monospace, Menlo, monospace; background:#1a1a1a; color:var(--fg); border:1px solid #444; border-radius:10px; padding:10px; }
+  .toast { position:fixed; left:50%; top:calc(12px + var(--safe-t)); transform:translateX(-50%); background:#333; color:#fff; padding:10px 16px; border-radius:10px; font-weight:600; z-index:9; display:none; }
+  .toast.on { display:block; }
+  .outside { background:#2a2600; border:1px solid var(--yel); }
+</style>
+</head>
+<body>
+<main>
+  <section id="v-scan" class="view on">
+    <div id="sesname"></div>
+    <div id="cam">
+      <video id="video" playsinline muted autoplay></video>
+      <div id="frame"></div>
+      <div id="dbg"></div>
+      <div id="big"></div>
+      <div id="hint">Zawieszka w ramce, naklejka na całą szerokość</div>
+      <div id="ask"><div id="askText"></div><div class="row"><button class="big yel" id="askYes">Dodaj „poza sklepem”</button><button class="big" id="askNo">Pomiń</button></div></div>
+      <div id="start"><button class="big red" id="btnStart">Start skanera</button><p id="startInfo">Pierwsze uruchomienie pobiera silnik OCR (ok. 6 MB). Potem działa bez sieci.</p></div>
+    </div>
+    <div id="scanbar">
+      <button class="big" id="btnUndo">↶ Cofnij</button>
+      <button class="big" id="btnAgain">+1 jeszcze raz</button>
+      <button class="big" id="btnDbg">i</button>
+    </div>
+  </section>
+
+  <section id="v-list" class="view">
+    <div class="pad">
+      <div class="row"><input id="sesInput" placeholder="Nazwa sesji, np. 101 mat. 42"><button class="big" id="btnNewSes" style="flex:0 0 auto">Nowa</button></div>
+      <div class="row"><select id="sesSelect"></select></div>
+      <div class="row"><input id="expect" placeholder="Filtr sesji: model-materiał, np. 101-42 (puste = bez filtra)" autocapitalize="characters" autocomplete="off"></div>
+      <div class="mut">Filtr: odczyt innego modelu/materiału niż w kupce wymaga stuknięcia „Dodaj mimo to”. Ustawia się sam z nazwy sesji typu „101 mat. 42”.</div>
+      <div class="row"><input id="manualSku" placeholder="Ręcznie: 101-42-94-30" list="skuList" autocapitalize="characters" autocomplete="off"><button class="big grn" id="btnManual" style="flex:0 0 auto">+1</button></div>
+      <datalist id="skuList"></datalist>
+      <div class="mut" id="listSummary"></div>
+      <table id="tbl"></table>
+      <h2>Poza sklepem (kod spoza listy)</h2>
+      <table id="tblOut"></table>
+      <button class="big" id="btnDelSes" style="margin-top:20px;background:#3a1a1a">Usuń tę sesję</button>
+    </div>
+  </section>
+
+  <section id="v-send" class="view">
+    <div class="pad">
+      <div class="mut">Plik CSV (<code>sku,ilosc</code>) z bieżącej sesji. Wklej go w sesji czatu, a Claude wpisze stany do Shopify. Skaner nic nie zapisuje do sklepu.</div>
+      <div class="row"><button class="big grn" id="btnCopy">Kopiuj CSV</button><button class="big" id="btnDownload">Pobierz plik</button></div>
+      <button class="big" id="btnShare">Udostępnij…</button>
+      <textarea id="csv" readonly></textarea>
+      <h2>Poza sklepem</h2>
+      <textarea id="csvOut" readonly style="min-height:80px"></textarea>
+      <button class="big" id="btnCopyOut">Kopiuj „poza sklepem”</button>
+      <div class="mut" id="verInfo"></div>
+    </div>
+  </section>
+</main>
+<nav>
+  <button data-v="v-scan" class="on">Skaner</button>
+  <button data-v="v-list">Lista</button>
+  <button data-v="v-send">Wyślij</button>
+</nav>
+<div class="toast" id="toast"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

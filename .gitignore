@@ -1,0 +1,5 @@
+node_modules
+tools/.cache/
+tools/lang_fast/
+tools/lang_best/
+tools/e2e/last.png
