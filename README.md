@@ -20,9 +20,20 @@ Adres: **https://pawel-jedrzejak.github.io/vegas-skaner/**
 | 1 | Zakładka **Lista** → wpisz nazwę sesji, np. `101 mat. 42` → **Nowa**. Nazwa w tym formacie włącza filtr sesji (patrz niżej). |
 | 2 | Zakładka **Skaner** → **Start skanera**. Zielona ramka = gotowy. |
 | 3 | Podsuń zawieszkę tak, żeby biała naklejka wypełniła ramkę na szerokość (ok. 15–20 cm od telefonu). |
-| 4 | Pik + duży napis `101-42-94-30 · 3 szt.` = zaliczone. Zabierz zawieszkę, ramka znowu zielona, następna para. |
-| 5 | Żółte okno „Kod spoza listy sklepu” = odczyt nie pasuje do żadnego SKU. Stuknij **Dodaj „poza sklepem”** albo **Pomiń**. |
-| 6 | Żółte okno „Inny model/materiał niż w tej sesji” = odczyt inny niż filtr sesji. Sprawdź zawieszkę, potem **Dodaj mimo to** albo **Pomiń**. |
+| 4 | **Wysoki podwójny pik** + duży napis `101-42-94-30 · 3 szt.` = zaliczone. Ramka żółta. |
+| 5 | Zabierz zawieszkę. **Krótkie niskie „tyk”** + zielona ramka = gotowy na kolejną parę. |
+| 6 | Żółte okno „Kod spoza listy sklepu” = odczyt nie pasuje do żadnego SKU. Stuknij **Dodaj „poza sklepem”** albo **Pomiń**. |
+| 7 | Żółte okno „Inny model/materiał niż w tej sesji” = odczyt inny niż filtr sesji. Sprawdź zawieszkę, potem **Dodaj mimo to** albo **Pomiń**. |
+
+### Dźwięki
+
+| Dźwięk | Znaczenie |
+|---|---|
+| Wysoki podwójny pik | Zeskanowane, sztuka doliczona |
+| Krótkie niskie „tyk” | Gotowy na kolejną zawieszkę |
+| Niski, opadający | Pytanie: kod spoza sklepu albo inny materiał niż w sesji |
+
+Dźwięki grają też przy włączonym wyciszeniu (iOS 16.4+). Głośność ustawiasz przyciskami iPhone'a. W **Lista → Dźwięki** każdy dźwięk można wyłączyć i odsłuchać (▶). iPhone nie pozwala stronom na wibracje, więc zostaje dźwięk i kolor ramki.
 
 Przyciski pod kamerą: **Cofnij** (cofa ostatnie zliczenie), **+1 jeszcze raz** (dolicza ostatni SKU bez skanowania), **i** (podgląd odczytu, do diagnozy).
 

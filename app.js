@@ -3,7 +3,7 @@ import { preprocess } from './preprocess.js';
 import { initOCR, recognize } from './ocr.js';
 import * as store from './store.js';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
@@ -23,9 +23,35 @@ let video, cap, ctx, audio, ocrCanvas, ocrCtx;
 
 // ---------- UI pomocnicze ----------
 function toast(msg, ms = 1500) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), ms); }
-function beep(freq = 1200, dur = 0.12, type = 'sine') {
-  try { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); const o = audio.createOscillator(), g = audio.createGain(); o.type = type; o.frequency.value = freq; g.gain.value = 0.4; o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + dur); } catch {}
+// Dźwięki (Web Audio). iOS: audioSession 'playback' = gra mimo przełącznika wyciszenia (Safari 16.4+).
+// Kontekst tworzony w geście użytkownika (Start), wznawiany przed każdym dźwiękiem (iOS go usypia).
+function initAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
+  try { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); if (audio.state !== 'running') audio.resume(); } catch {}
 }
+// notes: [[częstotliwość Hz, czas s], ...] grane po kolei; vol 0..1
+function tone(notes, type = 'square', vol = 0.9) {
+  try {
+    initAudio(); if (!audio) return;
+    let t = audio.currentTime + 0.01;
+    for (const [f, d] of notes) {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+      g.gain.setValueAtTime(vol, t + d - 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t + d + 0.01);
+      t += d + 0.02;
+    }
+  } catch {}
+}
+const SOUND = {
+  scanned: () => tone([[1760, 0.09], [2640, 0.14]], 'square', 0.9),   // zaliczone: wysoki podwójny pik
+  ready:   () => tone([[880, 0.07]], 'triangle', 0.8),                 // gotowy na kolejną: krótkie niskie „tyk”
+  warn:    () => tone([[440, 0.18], [330, 0.25]], 'sawtooth', 0.7),    // pytanie / poza sklepem
+};
+function sound(name) { if (!soundOn[name]) return; SOUND[name](); console.log('SOUND', name, Math.round(performance.now())); }
+const soundOn = { scanned: true, ready: true, warn: true };
+try { Object.assign(soundOn, JSON.parse(localStorage.getItem('vegas-skaner-sound') || '{}')); } catch {}
 function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch {} }
 function showView(id) { document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === id)); document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === id)); if (id === 'v-list') renderList(); if (id === 'v-send') renderSend(); }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => showView(b.dataset.v));
@@ -34,7 +60,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => showView(
 async function start() {
   $('btnStart').disabled = true; $('startInfo').textContent = 'Ładuję OCR…';
   try {
-    beep(1, 0.01); // odblokowanie audio na iOS (gest użytkownika)
+    initAudio(); tone([[1, 0.02]], 'sine', 0.0001); // odblokowanie audio na iOS (gest użytkownika)
     await initOCR(m => { if (m.status && m.progress != null) $('startInfo').textContent = `${m.status} ${Math.round(m.progress * 100)}%`; });
     $('startInfo').textContent = 'Włączam kamerę…';
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
@@ -91,7 +117,7 @@ function handle(r, box, text) {
   // zabezpieczenie przed podwójnym zliczeniem: po zaliczeniu zawieszka musi zniknąć z ramki (clearFrames klatek bez pełnego odczytu)
   if (!armed) {
     if (!complete) clearCount++; else clearCount = 0;
-    if (clearCount >= CFG.clearFrames && now - lastAccept > CFG.lockMs) { armed = true; setArmed(); $('big').textContent = ''; }
+    if (clearCount >= CFG.clearFrames && now - lastAccept > CFG.lockMs) { armed = true; setArmed(); $('big').textContent = ''; if (!$('ask').classList.contains('on')) sound('ready'); }
     return;
   }
   if (!complete) { prev = null; agree = 0; return; }
@@ -113,10 +139,10 @@ function accept(sku, src = 'scan') {
   const q = store.add(state, sku, 1, src); lastSku = sku; renderSessionName();
   $('big').innerHTML = `${sku}<small>${q} szt. w sesji</small>`;
   const f = $('frame'); f.classList.add('hit'); setTimeout(() => f.classList.remove('hit'), 400);
-  beep(1400, 0.12); vibrate(80);
+  sound('scanned'); vibrate(80);
 }
 function askMismatch(sku, exp) {
-  beep(500, 0.25, 'square'); autoHideAsk();
+  sound('warn'); autoHideAsk();
   $('askText').innerHTML = `<b>Inny model/materiał niż w tej sesji (${exp}):</b> ${sku}<div class="mut">Sprawdź zawieszkę. Jeśli odczyt jest dobry, dodaj.</div>`;
   $('ask').classList.add('on'); $('askYes').textContent = 'Dodaj mimo to';
   $('askYes').onclick = () => { $('ask').classList.remove('on'); accept(sku); };
@@ -125,7 +151,7 @@ function askMismatch(sku, exp) {
 let askTimer = null;
 function autoHideAsk() { clearTimeout(askTimer); askTimer = setTimeout(() => $('ask').classList.remove('on'), 10000); }
 function askOutside(sku, text) {
-  beep(500, 0.25, 'square'); autoHideAsk();
+  sound('warn'); autoHideAsk();
   $('askText').innerHTML = `<b>Kod spoza listy sklepu:</b> ${sku}<div class="mut">${(text || '').trim().split('\n').slice(0, 7).join(' · ')}</div>`;
   $('ask').classList.add('on'); $('askYes').textContent = 'Dodaj „poza sklepem”';
   $('askYes').onclick = () => { store.addOutside(state, text.trim(), sku); $('ask').classList.remove('on'); $('big').innerHTML = `${sku}<small>poza sklepem</small>`; vibrate(40); };
@@ -155,7 +181,7 @@ $('sesSelect').onchange = e => { state.currentId = e.target.value; store.save(st
 $('btnManual').onclick = () => {
   const sku = $('manualSku').value.trim().toUpperCase().replace(/\s+/g, '');
   if (!skus.has(sku)) { toast('Nie ma takiego SKU na liście sklepu', 2500); return; }
-  store.add(state, sku, 1, 'manual'); $('manualSku').value = ''; renderList(); beep(1400, 0.1);
+  store.add(state, sku, 1, 'manual'); $('manualSku').value = ''; renderList(); sound('scanned');
 };
 $('btnDelSes').onclick = () => { const s = store.current(state); if (!confirm(`Usunąć sesję „${s.name}” (${store.total(s)} szt.)?`)) return; state.sessions = state.sessions.filter(x => x.id !== s.id); state.currentId = state.sessions[0]?.id || null; store.save(state); renderList(); };
 
@@ -172,11 +198,23 @@ function csvFile() { const s = store.current(state); const name = `spis-${s.name
 $('btnDownload').onclick = () => { const f = csvFile(); const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); };
 $('btnShare').onclick = async () => { const f = csvFile(); try { if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: f.name }); else await navigator.share({ title: f.name, text: store.toCSV(store.current(state)) }); } catch (e) { if (e.name !== 'AbortError') toast('Udostępnianie niedostępne'); } };
 
+document.addEventListener('visibilitychange', () => { if (!document.hidden && audio) audio.resume().catch(() => {}); });
+// przełączniki dźwięków (Lista)
+document.querySelectorAll('[data-sound]').forEach(cb => {
+  cb.checked = soundOn[cb.dataset.sound];
+  cb.onchange = () => { soundOn[cb.dataset.sound] = cb.checked; try { localStorage.setItem('vegas-skaner-sound', JSON.stringify(soundOn)); } catch {} };
+});
+document.querySelectorAll('[data-test]').forEach(b => b.onclick = () => SOUND[b.dataset.test]());
+
 // ---------- init ----------
 (async () => {
   const [s, m] = await Promise.all([fetch('skus.json').then(r => r.json()), fetch('mapping.json').then(r => r.json())]);
   skus = new Set(s); mapping = m;
   $('skuList').innerHTML = s.map(x => `<option value="${x}">`).join('');
   renderSessionName();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    const had = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!had) return; if (!running) location.reload(); else toast('Nowa wersja: zamknij i otwórz aplikację', 4000); });
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
 })();
