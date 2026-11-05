@@ -3,7 +3,7 @@ import { preprocess } from './preprocess.js';
 import { initOCR, recognize } from './ocr.js';
 import * as store from './store.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.2.1';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
