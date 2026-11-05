@@ -85,7 +85,7 @@ python3 tools/e2e/make_video.py /tmp/synth /tmp/cam.mjpeg 12                # "f
 npm run serve &  node tools/e2e/run.mjs /tmp/cam.mjpeg                      # test w Chromium (Playwright)
 ```
 
-Na GitHub Pages publikuje `.github/workflows/pages.yml` (Settings → Pages → Source: GitHub Actions).
+Na GitHub Pages publikuje `.github/workflows/pages.yml`. Jednorazowo w repozytorium: **Settings → Pages → Build and deployment → Source: „GitHub Actions”**, potem **Actions → „GitHub Pages” → Run workflow** (albo dowolny push na `main` lub gałąź `claude/**`).
 
 ## Plany (nie teraz)
 
