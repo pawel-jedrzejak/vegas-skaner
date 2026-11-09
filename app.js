@@ -4,7 +4,7 @@ import { initOCR, recognize, recognizeLength } from './ocr.js';
 import { needsLengthPass, lengthRect, mergeLength } from './lengthpass.js';
 import * as store from './store.js';
 
-export const VERSION = '0.6.1';
+export const VERSION = '0.6.2';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
@@ -292,6 +292,7 @@ $('btnDelSes').onclick = () => { const s = store.current(state); if (!confirm(`U
 
 // ---------- wyślij ----------
 function renderSend() {
+  checkUpdate();
   const s = store.current(state); $('csv').value = store.toCSV(s);
   modeBox($('sendMode'), s);
   const head = store.MODES[store.modeOf(s)].header;
@@ -300,6 +301,26 @@ function renderSend() {
   $('sendCounts').textContent = `Sklep: ${Object.keys(s.items).length} SKU, ${store.total(s)} szt.` + (nOut ? ` · Poza sklepem: ${nOut} szt. (status poza_sklepem, nie idą do Shopify)` : '');
   $('verInfo').textContent = `Vegas Skaner ${VERSION} · ${store.MODES[store.modeOf(s)].label} · sesja „${s.name}” · ${store.fmtQty(s, store.total(s))} · lista SKU: ${skus.size}`;
 }
+// ---------- aktualizacja ----------
+// version.json na serwerze mówi, jaka wersja jest wydana. Gdy różna od uruchomionej: przycisk „Aktualizuj teraz”,
+// który czyści tylko pliki aplikacji (Cache Storage) i service workera. Sesje spisu (localStorage) zostają.
+let latest = null;
+async function checkUpdate() {
+  try { const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' }); if (r.ok) latest = (await r.json()).version; } catch { latest = null; }
+  const box = $('updBox'); if (!box) return;
+  if (latest && latest !== VERSION) { box.style.display = 'block'; $('updText').textContent = `Dostępna wersja ${latest} (masz ${VERSION}).`; }
+  else box.style.display = 'none';
+}
+async function hardUpdate() {
+  $('btnUpdate').disabled = true; $('updText').textContent = 'Aktualizuję…';
+  try {
+    if ('caches' in window) for (const k of await caches.keys()) await caches.delete(k);
+    if ('serviceWorker' in navigator) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+  } catch {}
+  location.reload();
+}
+$('btnUpdate').onclick = hardUpdate;
+
 async function copy(text) { try { await navigator.clipboard.writeText(text); toast('Skopiowane'); } catch { const ta = $('csv'); ta.select(); document.execCommand('copy'); toast('Skopiowane (zaznacz i kopiuj, jeśli nie)'); } }
 $('btnCopy').onclick = () => copy($('csv').value);
 function csvFile() { const s = store.current(state); const name = `${store.MODES[store.modeOf(s)].file}-${s.name.replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.csv`; return new File([store.toCSV(s)], name, { type: 'text/csv' }); }
@@ -328,6 +349,10 @@ document.querySelectorAll('[data-test]').forEach(b => b.onclick = () => SOUND[b.
   if ('serviceWorker' in navigator) {
     const had = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (!had) return; if (!running) location.reload(); else toast('Nowa wersja: zamknij i otwórz aplikację', 4000); });
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+      // sprawdzaj nową wersję przy każdym powrocie aplikacji na ekran (iOS rzadko sprawdza sam w trybie PWA)
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch(() => {});
   }
+  checkUpdate();
 })();

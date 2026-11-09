@@ -93,7 +93,9 @@ sku,ilosc,status,odczyt
 | status `sklep` | wpisz (kolumna `odczyt` ma ostatni tekst z OCR, tylko do diagnostyki) |
 | status `poza_sklepem` | **nie wpisuj**. Kolumna `odczyt` ma tekst z OCR do wyjaśnienia: stary kod, materiał spoza sklepu albo zły odczyt. |
 
-Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic nie kasuje. Sesji może być wiele, przełącza się je w **Lista**.
+Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic nie kasuje.
+
+**Aktualizacja:** numer wersji jest na dole zakładki **Wyślij**. Nowa wersja wchodzi sama po zamknięciu i otwarciu aplikacji. Jeśli na serwerze jest nowsza, w **Wyślij** pojawia się zielone pole z przyciskiem **Aktualizuj teraz** (sesje spisu zostają). Nie usuwaj aplikacji z ekranu, żeby ją zaktualizować: razem z nią znikają sesje. Sesji może być wiele, przełącza się je w **Lista**.
 
 ## Jak to działa (technicznie)
 
@@ -105,7 +107,7 @@ Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic 
 | Nogawka | `lengthpass.js`: gdy brakuje tylko nogawki, drugie przejście OCR na pasku pod „Dł.nogaw.”, powiększonym ×2/×3, tryb jednej linii, tylko cyfry i `"`. Ok. 60 ms, tylko w razie potrzeby. |
 | Lista SKU | `skus.json` (1482 SKU z Shopify, 26 materiałów × 19 pasów × 3 nogawki). |
 | Stan | `store.js`, localStorage. Sesja ma tryb (spis, przyjęcie, wydanie) i log zmian. Eksport dokłada nagłówek i znak. |
-| PWA | `manifest.webmanifest` + `sw.js` (cache wszystkich plików). |
+| PWA | `manifest.webmanifest` + `sw.js` (cache wszystkich plików). Nowa wersja pobiera pliki z pominięciem pamięci HTTP (GitHub Pages: max-age=600), aplikacja sprawdza `version.json` przy powrocie na ekran. Wydanie: podbij `VERSION` w `app.js`, `sw.js` i `version.json`. |
 
 ### Pomiary (bez telefonu)
 
@@ -113,7 +115,8 @@ Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic 
 |---|---|
 | Parser (testy jednostkowe) | 19/19 |
 | Sesje i eksport w 3 trybach, cel przycisku „+1”, odczyt w CSV (testy jednostkowe) | wszystkie OK |
-| Walidacja materiału (testy parsera: BZ, b2, 8Z, B0, B2A, B, Black, ©2, 2, 82, P) | 35/35 |
+| Walidacja materiału (testy parsera: BZ, b2, 8Z, B0, B2A, B, Black, ©2, 2, 82, P) | 37/37 |
+| Aktualizacja PWA z nagłówkami jak GitHub Pages (`tools/e2e/update_test.mjs`) | 0.6.1 → 0.6.2 i 0.6.2 → kolejna: nowa wersja od 1. otwarcia (0.6.1 → kolejna: utykała na starej) |
 | Sesja z samymi B2, potem zawieszka 419-02 (`tools/e2e/new_material.mjs`) | pytanie „Nowy model/materiał”, bez stuknięcia nic nie dolicza |
 | „+1” po „Dodaj poza sklepem” (`tools/e2e/bug_again.mjs`) | dolicza 414 poza sklepem; kod ze sklepu bez zmian (do 0.5.1 doliczał poprzedni kod ze sklepu) |
 | Zdjęcie z zawieszkami (2 naklejki) | 2/2 SKU dobrze |
