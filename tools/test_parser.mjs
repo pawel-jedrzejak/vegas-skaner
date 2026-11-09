@@ -31,7 +31,10 @@ const cases = [
   ['VEGAS\nMaterial 5\nModel 317\nObw.pasa\n66 / 26"\nDł.nogaw.\n30"', 'unknown', '317-05-66-30'],
   ['VEGAS\nMaterial 12\nModel 3333\nObw.pasa\n69 / 27"\nDł.nogaw.\n34"', 'unknown', '3333-12-69-34'],
   ['VEGAS\nMaterial 12\nModel 3333\nObw.pasa\n69 / 31"\nDł.nogaw.\n34"', 'partial', null],          // cale nie pasują
-  // model ze sklepu: pas nadal tylko 80–116 parzysty (85 = błąd OCR -> czytaj dalej)
+  // 11-09: 101 mat. 3 z pasem 78/31" (sklep ma 80–116) -> poza sklepem, nie cisza
+  ['VEGAS®\nMaterial 3\nModel 101\nObw.pasa\n78 / 31”\nDl.nogaw.\n32"', 'unknown', '101-03-78-32'],
+  ['VEGAS®\nMaterial 3\nModel 101\nObw.pasa\n78 / 33”\nDl.nogaw.\n32"', 'partial', null],               // 78 cm != 33"
+  // model ze sklepu: pas nadal tylko parzysty (85 = błąd OCR -> czytaj dalej)
   ['VEGAS\nMaterial B2\nModel 419\nObw.pasa\n85 / 33"\nDł.nogaw.\n32"', 'partial', null],
   ['VEGAS\nMaterial 55\nModel 419\nObw.pasa\n94 / 37"\nDi.nogaw.\n30"', 'unknown', '419-55-94-30'], // materiał spoza sklepu
   ['VEGAS\nMaterial 42\nModel 419\nObw.pasa\n94 / 37"\nDi.nogaw.\n30"', 'unknown', '419-42-94-30'], // 42 jest w 101, nie w 419

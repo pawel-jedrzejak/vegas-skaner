@@ -78,11 +78,15 @@ export function resolveMaterial(model, raw, opts = {}) {
 // Zgodność wstecz (testy, narzędzia): sam kod albo null
 export function mapMaterial(model, raw, mapping, skus) { const r = resolveMaterial(model, raw, { mapping, skus }); return r ? r.code : null; }
 
-// Pas w cm: modele ze sklepu 80–116 i tylko parzyste (jak w sklepie; nieparzyste to zwykle błąd OCR).
-// Modele spoza sklepu (np. damskie): 56–130, także nieparzyste (26" = 66 cm, 27" = 69 cm). Zawsze musi pasować do cali.
-const cmShop = cm => cm >= 80 && cm <= 116 && cm % 2 === 0;
+// Pas w cm, zawsze zgodny z calami z zawieszki. Zakres 56–130 dla wszystkich modeli: na zawieszkach bywają rozmiary
+// spoza sklepu (11-09: 101 z pasem 78/31", sklep ma 80–116), mają trafić do „poza sklepem”, a nie dawać ciszy.
+// Modele ze sklepu: tylko parzyste (męskie rozmiary; nieparzysty to zwykle błąd OCR). Spoza sklepu (np. damskie):
+// także nieparzyste (26" = 66 cm, 27" = 69 cm).
+const cmShop = cm => cm >= 56 && cm <= 130 && cm % 2 === 0;
 const cmAny = cm => cm >= 56 && cm <= 130;
-const inchOk = (cm, inch) => Math.abs(cm / 2.54 - inch) <= 1.3;
+// cale z zawieszki = cm / 2,54 zaokrąglone; na prawdziwych zawieszkach różnica <= ~0,6 (78/31: 0,3; 98/39: 0,4).
+// Tolerancja 0,85 odrzuca pomyłki typu 76/31 (1,1), które przy 1,3 przechodziły (11-09).
+const inchOk = (cm, inch) => Math.abs(cm / 2.54 - inch) <= 0.85;
 
 // Kandydaci na "cm" z jednego ciągu cyfr (OCR gubi/dokleja znaki: "410"->110, "941"->94, "116146"->116+46).
 function cmCandidates(run, cmOk) {
