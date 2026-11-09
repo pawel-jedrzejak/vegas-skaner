@@ -60,7 +60,7 @@ Pod ramką na żywo widać, co skaner już przeczytał, np. `Model 414 · Mat. 8
 | Mechanizm | Jak działa |
 |---|---|
 | Dwie zgodne klatki | SKU jest zaliczany dopiero, gdy dwa kolejne odczyty dadzą ten sam kod z listy sklepu. |
-| Zawieszka musi zniknąć | Po zaliczeniu ramka robi się żółta. Skaner uzbraja się ponownie dopiero, gdy przez 2 klatki nie widzi żadnej czytelnej zawieszki (brak białej naklejki albo ani modelu, ani materiału, ani pasa) i minęło 1,5 s. Niepełny odczyt tej samej zawieszki (np. nieczytelna nogawka) nie odblokowuje. Ta sama para dwa razy = trzeba ją świadomie zabrać i podsunąć ponownie. |
+| Zawieszka musi zniknąć | Po zaliczeniu ramka robi się żółta. Skaner uzbraja się ponownie dopiero, gdy przez 2 klatki w ramce nie ma dużej białej naklejki (co najmniej 8% ramki) **i** OCR nic nie czyta, oraz minęło 1,5 s. Rozmazana klatka przy ruchu ręki ani niepełny odczyt tej samej zawieszki nie odblokowują. Ta sama para dwa razy = trzeba ją świadomie zabrać z ramki i podsunąć ponownie. Jeśli ramka zostaje żółta mimo zabrania zawieszki, odsuń telefon od kupki na chwilę. |
 | Filtr sesji | Kupka to zwykle jeden model i materiał. Odczyt innego materiału (np. `20` zamiast `40`) nie wchodzi automatycznie, tylko pyta. |
 | Kontrola pasa | Centymetry muszą zgadzać się z calami z zawieszki (`84 / 33"`): 84 cm ≈ 33". Błędna cyfra w pasie jest odrzucana. |
 | Pewność OCR | Słowa z materiałem i modelem muszą mieć pewność ≥ 75 %. |
@@ -99,7 +99,7 @@ Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic 
 | Element | Rozwiązanie |
 |---|---|
 | OCR | [tesseract.js 6](https://github.com/naptha/tesseract.js) (Tesseract 5 LSTM, WASM SIMD) w Web Workerze, model `eng` z tessdata_fast. Pliki w `vendor/` (działa offline). |
-| Obraz | Wycinek ramki z tylnej kamery (1920×1080), skala szarości, automatyczne przycięcie do białej naklejki, progowanie Sauvola w Tesseracie, PSM 6. |
+| Obraz | Wycinek ramki z tylnej kamery (1920×1080), skala szarości, przycięcie do białej naklejki, progowanie Sauvola w Tesseracie, PSM 6. Naklejkę szukają dwie metody (`preprocess.js`): najjaśniejszy prostokąt (działa też na jasnych dżinsach z latarką) i stały próg (lepszy na ciemnym tle). Po niepełnym odczycie następna klatka próbuje drugiej metody. |
 | Parser | `parser.js`: model ze sklepu ∈ {101, 417, 419}, materiał (mapa `mapping.json`), pas 80–116 parzysty + zgodność z calami, nogawka ∈ {30, 32, 34}. Toleruje typowe błędy OCR (`4l7`, `941 37"`, `410` zamiast `110`, brak ukośnika). Wyraźnie przeczytany inny model (np. `414`) nie jest „poprawiany” do najbliższego, tylko idzie do „poza sklepem”. |
 | Nogawka | `lengthpass.js`: gdy brakuje tylko nogawki, drugie przejście OCR na pasku pod „Dł.nogaw.”, powiększonym ×2/×3, tryb jednej linii, tylko cyfry i `"`. Ok. 60 ms, tylko w razie potrzeby. |
 | Lista SKU | `skus.json` (1482 SKU z Shopify, 26 materiałów × 19 pasów × 3 nogawki). |
@@ -117,6 +117,8 @@ Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic 
 | Czas OCR jednej klatki (Node, ten sam WASM) | średnio 185 ms, maks. 400 ms |
 | Klatki z nagrania z magazynu (model 414, 33 klatki) | 22 pełne odczyty `414-87-106-32` → pytanie „poza sklepem”, 0 złych (przed poprawką: 0, skaner milczał) |
 | Jedna zawieszka trzymana ~10 s, nogawka co 0,3 s nieczytelna (`tools/e2e/make_hold.py`) | 1 szt. (wersja 0.4.0 liczyła 5) |
+| Nagranie z magazynu, jasne dżinsy + latarka (82 klatki, 419-B2-106-30) | 43 pełne odczyty, 0 złych, OCR klatki 109 ms (0.5.0: 34, 256 ms; na iPhonie 1,1–1,4 s, bo czytała całą ramkę) |
+| To samo nagranie jako film w Chromium, 2 pary po 16 s ruchu ręką | 2 szt. (0.5.0: 4 szt., każda para liczona 2×) |
 | Test end-to-end w Chromium z podstawioną kamerą (12 zawieszek po 2 s) | 7–8 zaliczonych, 0 złych, do 1 pytania „poza sklepem”, reszta pominięta (rozmycie 2 px); ok. 1 s od pojawienia się zawieszki do pika; 150 ms na klatkę. Wynik zmienia się o 1 przy przesunięciu ramki o kilka pikseli. |
 
 ## Narzędzia deweloperskie

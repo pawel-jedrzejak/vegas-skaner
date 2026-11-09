@@ -14,11 +14,16 @@ export function needsLengthPass(r) {
 export function lengthRect(lines, width, height) {
   const i = lines.findIndex(l => NOGAW.test(l.text));
   if (i < 0) return null;
-  const b = lines[i].bbox; const lh = Math.max(8, b.y1 - b.y0);
-  const top = Math.min(height - 1, b.y1 + Math.round(lh * 0.15));
-  const bottom = Math.min(height, top + Math.round(lh * 2.6));
+  const b = lines[i].bbox;
+  // typowa wysokość wiersza z czytelnych linii (mediana). Linia „nogaw” bywa zawyżona przez doklejony śmieciowy znak,
+  // więc liczymy od jej GÓRY + typowa wysokość, a nie od jej dołu (inaczej prostokąt zaczyna się pod „32"”).
+  const hs = lines.filter(l => (l.text.match(/[A-Za-z0-9]/g) || []).length >= 3).map(l => l.bbox.y1 - l.bbox.y0).sort((a, c) => a - c);
+  const typ = hs.length ? hs[hs.length >> 1] : (b.y1 - b.y0);
+  const lh = Math.max(8, Math.min(typ, b.y1 - b.y0));
+  const top = Math.min(height - 1, b.y0 + Math.round(lh * 0.9));
+  const bottom = Math.min(height, top + Math.round(lh * 2.4));
   if (bottom - top < 8) return null;
-  const pad = Math.round(lh * 0.5);
+  const pad = Math.round(lh * 0.6);
   const left = Math.max(0, Math.min(b.x0, width) - pad), right = Math.min(width, Math.max(b.x1, 0) + pad);
   return { left, top, width: Math.max(16, right - left), height: bottom - top };
 }

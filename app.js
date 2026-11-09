@@ -4,7 +4,7 @@ import { initOCR, recognize, recognizeLength } from './ocr.js';
 import { needsLengthPass, lengthRect, mergeLength } from './lengthpass.js';
 import * as store from './store.js';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.5.1';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
@@ -115,7 +115,7 @@ async function step() {
     const t0 = performance.now();
     const img = grabFrame();
     if (!img) { await new Promise(r => setTimeout(r, 100)); return; }
-    const pre = preprocess(img, 'gray', true); // szarość + przycięcie do białej naklejki; progowanie robi Tesseract (Sauvola)
+    const pre = preprocess(img, 'gray', true, finderPref); // szarość + przycięcie do naklejki; progowanie robi Tesseract (Sauvola)
     let res = { text: '', words: [], lines: [], ms: 0 };
     if (pre.box) { ocrCanvas.width = pre.width; ocrCanvas.height = pre.height; ocrCtx.putImageData(new ImageData(pre.data, pre.width, pre.height), 0, 0); res = await recognize(ocrCanvas); }
     let r = parseTag(res.text, { skus, mapping }); let p2 = '';
@@ -130,8 +130,10 @@ async function step() {
       }
     }
     r.conf = confidence(r, res.words);
-    handle(r, pre.box, res.text);
-    if (dbg) $('dbg').textContent = `${Math.round(performance.now() - t0)}ms (ocr ${Math.round(res.ms)}${p2}) ${pre.box ? pre.width + 'x' + pre.height : 'brak naklejki'} ${r.status} ${r.sku || ''} conf=${r.conf ? r.conf.min + (r.conf.ok ? '' : '!') : '-'}\n${res.text.trim().split('\n').slice(0, 8).join('\n')}`;
+    // niepełny odczyt -> w następnej klatce druga metoda szukania naklejki (jasne/ciemne tło), jeśli ma sensowny wycinek
+    if (r.status === 'partial' && pre.alt) finderPref = pre.used === 'bright' ? 'sticker' : 'bright';
+    handle(r, pre, res.text);
+    if (dbg) $('dbg').textContent = `${Math.round(performance.now() - t0)}ms (ocr ${Math.round(res.ms)}${p2}) ${pre.box ? pre.width + 'x' + pre.height + ' ' + (pre.used === 'bright' ? 'B' : 'S') + Math.round(pre.sticker * 100) + '%' : 'brak naklejki'}${armed ? '' : ' [blokada ' + clearCount + ']'} ${r.status} ${r.sku || ''} conf=${r.conf ? r.conf.min + (r.conf.ok ? '' : '!') : '-'}\n${res.text.trim().split('\n').slice(0, 8).join('\n')}`;
     await new Promise(r => requestAnimationFrame(r));
   }
 }
@@ -146,14 +148,20 @@ function confidence(r, words) {
   return { ok, min: all.length ? Math.round(Math.min(...all)) : null };
 }
 
-// "Pusta" klatka = w ramce nie ma czytelnej zawieszki: brak białej naklejki albo OCR nie złapał ani modelu, ani materiału,
-// ani pasa. Niepełny odczyt z częścią pól (np. nogawka przeczytana jako „cyl”) to wciąż ta sama zawieszka, nie pusta ramka.
-function isClear(r, box) { const f = r.fields || {}; return !box || (!f.model && !f.materialRaw && !f.waist); }
+// "Pusta" klatka = zawieszki NA PEWNO nie ma w ramce: nie widać dużej białej naklejki (>= 8% ramki; daleka zawieszka
+// w kupce się nie liczy) I OCR nie złapał ani modelu, ani materiału, ani pasa. Sam brak odczytu nie wystarcza:
+// rozmazane klatki przy ruchu ręki dają pusty OCR, choć naklejka wciąż jest w ramce (nagranie 11-09: 1 para liczona 2×).
+const MIN_STICKER = 0.08;
+function isClear(r, pre) {
+  const f = r.fields || {};
+  const noFields = !f.model && !f.materialRaw && !f.waist;
+  return noFields && (!pre.box || pre.sticker < MIN_STICKER);
+}
 
-function handle(r, box, text) {
+function handle(r, pre, text) {
   const now = performance.now();
   const complete = r.status !== 'partial';
-  const clear = isClear(r, box);
+  const clear = isClear(r, pre);
   // zabezpieczenie przed podwójnym zliczeniem: po zaliczeniu zawieszka musi zniknąć z ramki (clearFrames pustych klatek)
   if (!armed) {
     if (clear) clearCount++; else clearCount = 0;
@@ -182,7 +190,7 @@ function handle(r, box, text) {
   if (exp && !r.sku.startsWith(exp + '-')) { askMismatch(r.sku, exp); return; }
   accept(r.sku);
 }
-let lastSku = null, askedSku = null, emptyCount = 0;
+let lastSku = null, askedSku = null, emptyCount = 0, finderPref = 'sticker';
 // Podgląd na żywo pod ramką: co skaner już przeczytał. Pomaga zobaczyć, czego brakuje (np. „Model ?”).
 const HINT = 'Zawieszka w ramce, naklejka na całą szerokość';
 function showReading(r) {

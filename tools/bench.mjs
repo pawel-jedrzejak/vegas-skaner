@@ -20,6 +20,7 @@ if (wl) params.tessedit_char_whitelist = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZab
 await worker.setParameters(params);
 
 const files = fs.readdirSync(dir).filter(f => /\.(jpe?g|png)$/i.test(f)).sort();
+let pref = args.finder && args.finder !== 'alt' ? args.finder : 'sticker'; // 'alt' = jak w aplikacji: zmiana metody po niepełnym odczycie
 let ok = 0, bad = 0, partial = 0, unknown = 0; const times = []; const p2times = [];
 for (const f of files) {
   let img = sharp(path.join(dir, f)).rotate();
@@ -27,7 +28,7 @@ for (const f of files) {
   const w = targetW || Math.round(meta.width * scale);
   const { data, info } = await img.resize({ width: w }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const t0 = performance.now();
-  const im = preprocess({ data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.length), width: info.width, height: info.height }, pre, crop);
+  const im = preprocess({ data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.length), width: info.width, height: info.height }, pre, crop, pref);
   const t1 = performance.now();
   let png = await sharp(Buffer.from(im.data.buffer), { raw: { width: im.width, height: im.height, channels: 4 } }).png().toBuffer();
   const up = parseInt(args.up || '0', 10); // powiększ naklejkę do tej szerokości (0 = bez zmian)
@@ -67,6 +68,7 @@ for (const f of files) {
   const find = v => { const w = words.filter(w => w.text.replace(/[^A-Z0-9]/gi, '').toUpperCase().endsWith(String(v).toUpperCase())); return w.length ? Math.max(...w.map(x => x.confidence)) : null; };
   r.conf = r.status === 'partial' ? null : (() => { const c = [find(r.fields.materialRaw), find(r.fields.model), find(r.fields.waist), find(r.fields.length)].filter(x => x != null); return c.length ? Math.round(Math.min(...c)) : null; })();
   if (args.conf) console.log(`CONF\t${f}\t${r.status}\t${r.sku}\texp=${truth[f]}\t${r.sku === truth[f] ? 'same' : 'DIFF'}\tconf=${r.conf}\tmat=${find(r.fields.materialRaw)}\tmodel=${find(r.fields.model)}\twaist=${find(r.fields.waist)}\tlen=${find(r.fields.length)}`);
+  if ((args.finder || 'alt') === 'alt' && r.status === 'partial' && im.alt) pref = im.used === 'bright' ? 'sticker' : 'bright';
   const exp = truth[f];
   let verdict;
   if (exp) { if (r.status === 'ok' && r.sku === exp) { ok++; verdict = 'OK'; } else if (r.status === 'ok') { bad++; verdict = 'BAD!'; } else if (r.status === 'unknown') { unknown++; verdict = 'unk'; } else { partial++; verdict = 'part'; } }
