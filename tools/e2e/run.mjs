@@ -14,9 +14,15 @@ await page.click('#btnStart');
 await page.waitForSelector('#start', { state: 'hidden', timeout: 120000 });
 console.log('skaner wystartował po', Date.now() - t0, 'ms');
 await page.click('#btnDbg');
+// AUTOYES=1: test OCR na filmie z wieloma materiałami w jednej sesji -> pytania „nowy model/materiał” potwierdzamy jak człowiek
+let confirmed = 0;
+const autoyes = process.env.AUTOYES ? setInterval(async () => {
+  try { if (await page.$eval('#ask', e => e.classList.contains('on') && /model\/materiał/.test(e.textContent))) { await page.click('#askYes'); confirmed++; } } catch {}
+}, 250) : null;
 // film: 2 s czerni + (2 s zawieszka + 1 s czerń) x N; nie czekaj do zapętlenia. DUR_MS nadpisuje (inne filmy).
 const dur = process.env.DUR_MS ? +process.env.DUR_MS : expected.length * 3000 + 2500;
 await page.waitForTimeout(dur);
+if (autoyes) clearInterval(autoyes);
 await page.screenshot({ path: 'tools/e2e/last.png' });
 const st = await page.evaluate(() => JSON.parse(localStorage.getItem('vegas-skaner-v1')));
 const dbg = await page.textContent('#dbg');
@@ -31,5 +37,6 @@ bad = got.length;
 const counted = Object.values(items).reduce((a, b) => a + b, 0);
 console.log('oczekiwane:', expected.join(' '));
 console.log('zaliczone :', accepts.map(a => a.line.replace('ACCEPT ', '') + ' @' + a.t + 'ms').join(' | '));
+if (process.env.AUTOYES) console.log(`potwierdzone „nowy materiał”: ${confirmed}`);
 console.log(`OK=${ok} ZŁE=${bad} pytania=${asked.length}${asked.length ? ' (' + asked.join(' ') + ')' : ''} pominięte=${missed} z ${expected.length}; w sesji ${counted} szt.; items=${JSON.stringify(items)}`);
 console.log('ostatni debug:', dbg.split('\n')[0]);

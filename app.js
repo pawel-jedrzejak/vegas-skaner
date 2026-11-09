@@ -4,7 +4,7 @@ import { initOCR, recognize, recognizeLength } from './ocr.js';
 import { needsLengthPass, lengthRect, mergeLength } from './lengthpass.js';
 import * as store from './store.js';
 
-export const VERSION = '0.5.2';
+export const VERSION = '0.6.0';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
@@ -186,9 +186,15 @@ function handle(r, pre, text) {
   // zaliczone
   armed = false; clearCount = 0; lastAccept = now; setArmed();
   console.log('ACCEPT', r.status, r.sku, Math.round(now));
-  const exp = store.current(state).expect; // np. "101-42": kupka jednego modelu i materiału
-  if (exp && !r.sku.startsWith(exp + '-')) { askMismatch(r.sku, exp); return; }
-  accept(r.sku);
+  // zgodność z sesją: filtr z nazwy sesji („419 mat. B2”) albo, bez filtra, materiały już zeskanowane w tej sesji.
+  // Nowy model/materiał wymaga stuknięcia: zgubiona litera („B2” -> „2” = 419-02) daje prawdziwy, ale zły SKU.
+  const cur = store.current(state), mm = r.sku.split('-').slice(0, 2).join('-');
+  if (cur.expect && mm !== cur.expect) { askMismatch(r.sku, `Inny model/materiał niż w tej sesji (${cur.expect})`, text); return; }
+  if (!cur.expect) {
+    const seen = [...new Set(Object.keys(cur.items).map(k => k.split('-').slice(0, 2).join('-')))];
+    if (seen.length && !seen.includes(mm)) { askMismatch(r.sku, `Nowy model/materiał w tej sesji (dotąd: ${seen.join(', ')})`, text); return; }
+  }
+  accept(r.sku, 'scan', text);
 }
 let askedSku = null, emptyCount = 0, finderPref = 'sticker';
 // Podgląd na żywo pod ramką: co skaner już przeczytał. Pomaga zobaczyć, czego brakuje (np. „Model ?”).
@@ -202,20 +208,21 @@ function showReading(r) {
   else if (r.status === 'ok' && r.conf && !r.conf.ok) t += ' · niewyraźnie';
   $('hint').textContent = t;
 }
-function accept(sku, src = 'scan') {
+function accept(sku, src = 'scan', text = '') {
   $('ask').classList.remove('on');
-  const q = store.add(state, sku, 1, src); renderSessionName();
+  const q = store.add(state, sku, 1, src, text); renderSessionName();
   const cur = store.current(state), mode = store.modeOf(cur);
   $('big').innerHTML = mode === 'spis' ? `${sku}<small>${q} szt. w sesji</small>`
     : `${mode === 'wydanie' ? '−1' : '+1'} · ${sku}<small>${store.MODES[mode].label}: razem ${store.fmtQty(cur, q)}</small>`;
   const f = $('frame'); f.classList.add('hit'); setTimeout(() => f.classList.remove('hit'), 400);
   sound('scanned'); vibrate(80);
 }
-function askMismatch(sku, exp) {
+function askMismatch(sku, why, text = '') {
   sound('warn'); autoHideAsk();
-  $('askText').innerHTML = `<b>Inny model/materiał niż w tej sesji (${exp}):</b> ${sku}<div class="mut">Sprawdź zawieszkę. Jeśli odczyt jest dobry, dodaj.</div>`;
+  const ocr = (text || '').trim().split('\n').slice(0, 7).join(' · ');
+  $('askText').innerHTML = `<b>${why}:</b> ${sku}<div class="mut">Sprawdź napis „Materiał” na zawieszce. Jeśli odczyt jest dobry, dodaj.${ocr ? '<br>Odczyt: ' + ocr : ''}</div>`;
   $('ask').classList.add('on'); $('askYes').textContent = 'Dodaj mimo to';
-  $('askYes').onclick = () => { $('ask').classList.remove('on'); accept(sku); };
+  $('askYes').onclick = () => { $('ask').classList.remove('on'); accept(sku, 'scan', text); };
   $('askNo').onclick = () => { $('ask').classList.remove('on'); };
 }
 let askTimer = null;

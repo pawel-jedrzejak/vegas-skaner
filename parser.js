@@ -27,18 +27,53 @@ function norm(text) {
     .filter(Boolean);
 }
 
-// Zamiana kodu materiału z zawieszki na kod w SKU.
-export function mapMaterial(model, raw, mapping) {
-  if (!raw) return null;
-  const m = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (!m) return null;
-  const perModel = (mapping && mapping[model]) || {};
-  if (perModel[m]) return perModel[m];
-  if (/^[0-9]$/.test(m)) return '0' + m; // "2" -> "02"
-  if (/^[0-9]{2}$/.test(m)) return m;
-  if (/^[A-Z][0-9]$/.test(m)) return m; // B2
-  return null;
+// ---------- materiał ----------
+// Walidacja: dla modeli ze sklepu materiał musi być jednym z kodów tego modelu z listy SKU (419: 92, 05, 02, 94, BK, B2, PO),
+// zapisanym tak, jak bywa na zawieszce: sam kod („B2”, „b2”), cyfra bez zera („2” = 02) albo alias z mapping.json
+// („BLACK” = BK, „P” = PO). Wielkość liter bez znaczenia.
+// Pomyłki OCR liter/cyfr (Z/2, B/8, O/0/D, S/5, I/1/L, G/6) poprawiamy tylko, gdy wynik jest jednoznaczny („BZ” -> B2).
+// Śmieci z literami, które nie dają się jednoznacznie poprawić („B0”, „B2A”), to nieczytelny odczyt: skaner czyta dalej,
+// bez pytania. Czyste cyfry spoza listy („14”, „87”) i same litery („B”) to możliwy prawdziwy kod spoza sklepu -> pytanie.
+const CONFUSE = { B: 'B8', 8: '8B', Z: 'Z2', 2: '2Z', O: 'O0D', 0: '0OD', D: 'D0O', Q: 'Q0', S: 'S5', 5: '5S', I: 'I1L', 1: '1IL', L: 'L1I', G: 'G6', 6: '6G' };
+const spellCache = new WeakMap();
+function spellings(model, skus, mapping) {
+  if (!skus) return null;
+  let byModel = spellCache.get(skus); if (!byModel) { byModel = {}; spellCache.set(skus, byModel); }
+  if (byModel[model]) return byModel[model];
+  const codes = new Set(); for (const sku of skus) { const [m, mat] = sku.split('-'); if (m === model) codes.add(mat); }
+  if (!codes.size) return (byModel[model] = null);
+  const dict = {};
+  for (const c of codes) { dict[c] = c; if (/^0[0-9]$/.test(c)) dict[c[1]] = c; }
+  for (const [alias, c] of Object.entries((mapping && mapping[model]) || {})) if (codes.has(c)) dict[alias.toUpperCase()] = c;
+  return (byModel[model] = dict);
 }
+function variants(raw) {
+  let out = [''];
+  for (const ch of raw) { const alts = CONFUSE[ch] || ch; out = out.flatMap(p => [...alts].map(a => p + a)); if (out.length > 300) return []; }
+  return out;
+}
+/** @returns {{code:string, how:'exact'|'fuzzy'|'other'}|null}  null = nieczytelne (czytaj dalej) */
+export function resolveMaterial(model, raw, opts = {}) {
+  if (!raw) return null;
+  const m = String(raw).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!m || m.length > 6) return null;
+  const dict = spellings(model, opts.skus, opts.mapping);
+  const pad = x => (/^[0-9]$/.test(x) ? '0' + x : x);
+  if (!dict) { // model spoza sklepu albo brak listy SKU: bez walidacji
+    const perModel = (opts.mapping && opts.mapping[model]) || {};
+    if (perModel[m]) return { code: perModel[m], how: 'exact' };
+    if (/^[0-9]{1,2}$/.test(m) || /^[A-Z][0-9]$/.test(m)) return { code: pad(m), how: 'other' };
+    return null;
+  }
+  if (dict[m]) return { code: dict[m], how: 'exact' };
+  if (/^[0-9]{1,2}$/.test(m)) return { code: pad(m), how: 'other' };          // np. 14: możliwy materiał spoza sklepu
+  const hits = new Set(variants(m).map(v => dict[v]).filter(Boolean));
+  if (hits.size === 1) return { code: [...hits][0], how: 'fuzzy' };            // np. BZ -> B2
+  if (/^[A-Z]{1,2}$/.test(m)) return { code: m, how: 'other' };              // np. B: zapytaj
+  return null;                                                                // np. B0, B2A: nieczytelne
+}
+// Zgodność wstecz (testy, narzędzia): sam kod albo null
+export function mapMaterial(model, raw, mapping, skus) { const r = resolveMaterial(model, raw, { mapping, skus }); return r ? r.code : null; }
 
 const cmOk = cm => cm >= 80 && cm <= 116 && cm % 2 === 0;
 const inchOk = (cm, inch) => Math.abs(cm / 2.54 - inch) <= 1.3;
@@ -96,19 +131,28 @@ export function parseTag(text, opts = {}) {
   }
 
   // --- material ---
-  const matRe = new RegExp('MATER\\S*' + SEP + '([A-Z0-9]{1,6})(?:\\b|$)', 'i');
+  // Separator między „Materiał” a wartością: zwykle spacje. Dziwny znak tuż przed jednoznakową wartością („Materiat ©2”)
+  // może być zgubioną literą („B2” -> „©2” -> 2 = 02, zły SKU), więc taki odczyt odrzucamy.
+  const matRe = /MATER\S*?([\s=:.,;»«©®°_~\-]+)([A-Z0-9]{1,6})(?:\b|$)/i;
   for (const l of lines) {
     const m = l.match(matRe);
-    if (m) { f.materialRaw = m[1].toUpperCase(); break; }
+    if (!m) continue;
+    const odd = /[^\s=:.,;]/.test(m[1]);
+    if (odd && m[2].length === 1) { f.materialOdd = true; break; }
+    f.materialRaw = m[2].toUpperCase(); break;
   }
-  if (!f.materialRaw) {
+  if (!f.materialRaw && !f.materialOdd) {
+    // wartość w osobnej linii (krzywa naklejka): tylko czysta linia z samym kodem, bez obcinania znaków
     const i = lines.findIndex(l => /MATER|ATERIA/i.test(l));
     if (i >= 0) {
-      const cand = [lines[i].replace(/.*(MATER|ATERIA)\S*/i, '').trim(), lines[i + 1] || ''].map(s => s.replace(/[^A-Z0-9]/gi, '')).find(s => /^[A-Z0-9]{1,5}$/i.test(s));
+      const cand = [lines[i].replace(/.*?(MATER|ATERIA)\S*/i, '').trim(), (lines[i + 1] || '').trim()].find(s => /^[A-Z0-9]{1,5}$/i.test(s));
       if (cand) f.materialRaw = cand.toUpperCase();
     }
   }
-  if (f.model && f.materialRaw) f.material = mapMaterial(f.model, f.materialRaw, opts.mapping);
+  if (f.model && f.materialRaw) {
+    const res = resolveMaterial(f.model, f.materialRaw, opts);
+    if (res) { f.material = res.code; f.materialHow = res.how; }
+  }
 
   // --- pas: "84 / 33"" --- cm i cale muszą do siebie pasować
   const runsOf = l => toDigits(l.replace(/[\/|\\\[\]]/g, ' ')).split(/[^0-9]+/).filter(Boolean);
@@ -140,7 +184,7 @@ export function parseTag(text, opts = {}) {
 
   const complete = f.model && f.materialRaw && f.waist && f.length;
   if (!complete) return { status: 'partial', sku: null, fields: f };
-  if (!f.material) return { status: 'unknown', sku: `${f.model}-${f.materialRaw}-${f.waist}-${f.length}`, fields: f, reason: 'material' };
+  if (!f.material) return { status: 'partial', sku: null, fields: f, reason: 'material' }; // nieczytelny materiał: czytaj dalej
   if (f.modelOther) return { status: 'unknown', sku: `${f.model}-${f.material}-${f.waist}-${f.length}`, fields: f, reason: 'model' };
   const sku = `${f.model}-${f.material}-${f.waist}-${f.length}`;
   if (opts.skus && !opts.skus.has(sku)) return { status: 'unknown', sku, fields: f, reason: 'not-in-list' };

@@ -30,8 +30,9 @@ export function current(state) {
   if (!s) s = newSession(state, 'Sesja 1');
   return s;
 }
-export function add(state, sku, delta = 1, src = 'scan') {
+export function add(state, sku, delta = 1, src = 'scan', text = '') {
   const s = current(state);
+  if (text && delta > 0) { s.reads = s.reads || {}; s.reads[sku] = String(text).trim().slice(0, 240); } // ostatni odczyt OCR (diagnostyka)
   s.items[sku] = (s.items[sku] || 0) + delta;
   if (s.items[sku] <= 0) delete s.items[sku];
   s.log.push({ t: Date.now(), sku, delta, src });
@@ -64,13 +65,15 @@ export function lastEntry(s) {
 }
 export function totalOutside(s) { return Object.values(s.outside || {}).reduce((a, o) => a + o.qty, 0); }
 export function total(s) { return Object.values(s.items).reduce((a, b) => a + b, 0); }
-// Jeden plik na sesję: SKU ze sklepu (status "sklep") i odczyty spoza sklepu (status "poza_sklepem", z tekstem z OCR).
+// Jeden plik na sesję: SKU ze sklepu (status "sklep", w kolumnie odczyt ostatni tekst z OCR do diagnostyki)
+// i odczyty spoza sklepu (status "poza_sklepem", z tekstem z OCR).
 // Do Shopify idą tylko wiersze "sklep"; "poza_sklepem" są do wyjaśnienia (stary kod, materiał spoza sklepu, zły odczyt).
 export function toCSV(s) {
   const m = MODES[modeOf(s)];
   const val = q => (m.sign > 0 ? '+' + q : m.sign < 0 ? '-' + q : String(q));
   const esc = t => '"' + String(t || '').replace(/\s*\n\s*/g, ' | ').replace(/[ \t]{2,}/g, ' ').replace(/"/g, "'").trim() + '"';
-  const rows = Object.entries(s.items).sort(([a], [b]) => a.localeCompare(b)).map(([sku, q]) => `${sku},${val(q)},sklep,`);
+  const reads = s.reads || {};
+  const rows = Object.entries(s.items).sort(([a], [b]) => a.localeCompare(b)).map(([sku, q]) => `${sku},${val(q)},sklep,${reads[sku] ? esc(reads[sku]) : ''}`);
   const out = Object.entries(s.outside || {}).sort(([a], [b]) => a.localeCompare(b)).map(([k, o]) => `${k},${val(o.qty)},poza_sklepem,${esc(o.text)}`);
   return [m.header + ',status,odczyt', ...rows, ...out].join('\n') + '\n';
 }

@@ -50,6 +50,15 @@ store.undo(st); store.undo(st);
   eq(store.lastEntry(store.current(st)).sku, '101-42-96-30', 'inna sesja: jej własny ostatni wpis');
 }
 
+// odczyt OCR zapisany przy SKU ze sklepu (diagnostyka złych odczytów w pliku)
+{
+  const d = store.newSession(st, 'diag');
+  store.add(st, '419-B2-94-32', 1, 'scan', 'VEGAS\nMaterial B2\n  Model   419\n94 / 37"');
+  store.add(st, '419-B2-94-32', 1, 'again');
+  eq(store.toCSV(d), 'sku,ilosc,status,odczyt\n419-B2-94-32,2,sklep,"VEGAS | Material B2 | Model 419 | 94 / 37\'"\n', 'odczyt OCR w wierszu sklep');
+  st.currentId = sp.id;
+}
+
 // sesje są rozdzielne, stara sesja bez pola mode = spis
 st.currentId = sp.id; eq(store.toCSV(store.current(st)), 'sku,ilosc,status,odczyt\n101-42-94-30,2,sklep,\n101-42-96-30,1,sklep,\n', 'powrót do sesji spisu');
 eq(store.modeOf({ items: {} }), 'spis', 'stara sesja bez trybu');

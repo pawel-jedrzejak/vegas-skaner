@@ -61,7 +61,8 @@ Pod ramką na żywo widać, co skaner już przeczytał, np. `Model 414 · Mat. 8
 |---|---|
 | Dwie zgodne klatki | SKU jest zaliczany dopiero, gdy dwa kolejne odczyty dadzą ten sam kod z listy sklepu. |
 | Zawieszka musi zniknąć | Po zaliczeniu ramka robi się żółta. Skaner uzbraja się ponownie dopiero, gdy przez 2 klatki w ramce nie ma dużej białej naklejki (co najmniej 8% ramki) **i** OCR nic nie czyta, oraz minęło 1,5 s. Rozmazana klatka przy ruchu ręki ani niepełny odczyt tej samej zawieszki nie odblokowują. Ta sama para dwa razy = trzeba ją świadomie zabrać z ramki i podsunąć ponownie. Jeśli ramka zostaje żółta mimo zabrania zawieszki, odsuń telefon od kupki na chwilę. |
-| Filtr sesji | Kupka to zwykle jeden model i materiał. Odczyt innego materiału (np. `20` zamiast `40`) nie wchodzi automatycznie, tylko pyta. |
+| Filtr sesji | Kupka to zwykle jeden model i materiał. Odczyt innego materiału (np. `20` zamiast `40`) nie wchodzi automatycznie, tylko pyta. Bez filtra w nazwie sesji skaner pyta przy pierwszym skanie każdego nowego modelu/materiału w sesji (np. same B2, nagle 02: zgubione „B”). |
+| Walidacja materiału | Materiał musi być kodem danego modelu z listy SKU (419: 92, 05, 02, 94, BK, B2, PO), zapisanym jak na zawieszce: `B2`/`b2`, `BLACK`, `2` = 02, `P` = PO. Pomyłki OCR poprawiane tylko jednoznacznie (`BZ` → B2). Śmieci (`B0`, `B2A`) = czytaj dalej, bez pytania. Czyste cyfry spoza listy (`14`) albo samo `B` = pytanie „poza sklepem”. |
 | Kontrola pasa | Centymetry muszą zgadzać się z calami z zawieszki (`84 / 33"`): 84 cm ≈ 33". Błędna cyfra w pasie jest odrzucana. |
 | Pewność OCR | Słowa z materiałem i modelem muszą mieć pewność ≥ 75 %. |
 | Lista SKU | Kod jest zaliczany tylko, jeśli istnieje w sklepie (1482 warianty). |
@@ -89,7 +90,7 @@ sku,ilosc,status,odczyt
 |---|---|
 | nagłówek `sku,ilosc` | ustaw stan „dostępne” na podaną liczbę (`inventorySetQuantities`) |
 | nagłówek `sku,zmiana` | zmień stan o podaną wartość, `+` dodaje, `-` odejmuje (`inventoryAdjustQuantities`). Przed wpisem sprawdź, czy wydanie nie zejdzie poniżej zera. |
-| status `sklep` | wpisz |
+| status `sklep` | wpisz (kolumna `odczyt` ma ostatni tekst z OCR, tylko do diagnostyki) |
 | status `poza_sklepem` | **nie wpisuj**. Kolumna `odczyt` ma tekst z OCR do wyjaśnienia: stary kod, materiał spoza sklepu albo zły odczyt. |
 
 Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic nie kasuje. Sesji może być wiele, przełącza się je w **Lista**.
@@ -111,7 +112,9 @@ Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic 
 | Test | Wynik |
 |---|---|
 | Parser (testy jednostkowe) | 19/19 |
-| Sesje i eksport w 3 trybach, cel przycisku „+1” (testy jednostkowe) | wszystkie OK |
+| Sesje i eksport w 3 trybach, cel przycisku „+1”, odczyt w CSV (testy jednostkowe) | wszystkie OK |
+| Walidacja materiału (testy parsera: BZ, b2, 8Z, B0, B2A, B, Black, ©2, 2, 82, P) | 35/35 |
+| Sesja z samymi B2, potem zawieszka 419-02 (`tools/e2e/new_material.mjs`) | pytanie „Nowy model/materiał”, bez stuknięcia nic nie dolicza |
 | „+1” po „Dodaj poza sklepem” (`tools/e2e/bug_again.mjs`) | dolicza 414 poza sklepem; kod ze sklepu bez zmian (do 0.5.1 doliczał poprzedni kod ze sklepu) |
 | Zdjęcie z zawieszkami (2 naklejki) | 2/2 SKU dobrze |
 | 120 sztucznych zawieszek (obrót ±8°, rozmycie, odblask, cień, zagięcie, szum, JPEG) | 67 dobrze, 0 źle, 5 „poza sklepem” (do potwierdzenia stuknięciem), 48 bez odczytu (najbardziej rozmyte/małe, następna klatka) |

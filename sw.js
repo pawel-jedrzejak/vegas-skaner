@@ -1,5 +1,5 @@
 // Service worker: wszystko w cache po pierwszym wczytaniu -> działa bez sieci. Zmień VERSION, żeby wymusić odświeżenie.
-const VERSION = 'vegas-skaner-v0.5.2';
+const VERSION = 'vegas-skaner-v0.6.0';
 const FILES = [
   './', 'index.html', 'app.js', 'parser.js', 'preprocess.js', 'ocr.js', 'store.js', 'lengthpass.js', 'skus.json', 'mapping.json', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

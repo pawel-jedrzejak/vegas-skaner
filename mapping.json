@@ -1,5 +1,5 @@
 {
-  "_comment": "Kod materiału z zawieszki -> kod materiału w SKU. Reguła ogólna: jedna cyfra -> dopisz 0 z przodu (2 -> 02). Poniżej wyjątki per model. DO POTWIERDZENIA: co jest na zawieszce czerni 419 (BLACK/BLK/BK?), popielu (P?) i chino mat. 99.",
+  "_comment": "Aliasy: napis na zawieszce -> kod materiału w SKU (wielkość liter bez znaczenia). Same kody z listy SKU i cyfra bez zera (2 = 02) działają bez wpisu. Potwierdzone 11-09: 419 ma na zawieszkach B2 (też b2) i BLACK. DO POTWIERDZENIA: co znaczy samo B na zawieszce 419, popiel (P?), chino mat. 99 (numer na zawieszce 14?).",
   "419": { "P": "PO", "BLACK": "BK", "BLK": "BK", "BK": "BK", "CZARNY": "BK", "CZ": "BK" },
   "101": {},
   "417": {}
