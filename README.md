@@ -19,9 +19,9 @@ Tryb wybierasz przy zakładaniu sesji (**Lista → Tryb → Nowa**). Jedna sesja
 
 | Tryb | Pasek | Co skanujesz | Plik | Co zrobi Shopify |
 |---|---|---|---|---|
-| Spis z natury | szary | wszystko, co leży na półce | `sku,ilosc` z liczbą, np. `4` | **ustawi** stan na tę liczbę |
-| Przyjęcie | zielony | tylko przyjmowane pary | `sku,zmiana` ze znakiem, np. `+3` | **doda** do stanu |
-| Wydanie | czerwony | tylko wydawane pary | `sku,zmiana` ze znakiem, np. `-2` | **odejmie** od stanu |
+| Spis z natury | szary | wszystko, co leży na półce | `sku,ilosc,…` z liczbą, np. `4` | **ustawi** stan na tę liczbę |
+| Przyjęcie | zielony | tylko przyjmowane pary | `sku,zmiana,…` ze znakiem, np. `+3` | **doda** do stanu |
+| Wydanie | czerwony | tylko wydawane pary | `sku,zmiana,…` ze znakiem, np. `-2` | **odejmie** od stanu |
 
 Nie mieszaj trybów: dostawy nie skanuj w sesji spisu, bo plik ustawiłby stan na liczbę z dostawy, zamiast ją dodać.
 
@@ -47,7 +47,9 @@ Nie mieszaj trybów: dostawy nie skanuj w sesji spisu, bo plik ustawiłby stan n
 
 Dźwięki grają też przy włączonym wyciszeniu (iOS 16.4+). Głośność ustawiasz przyciskami iPhone'a. W **Lista → Dźwięki** każdy dźwięk można wyłączyć i odsłuchać (▶). iPhone nie pozwala stronom na wibracje, więc zostaje dźwięk i kolor ramki.
 
-Przyciski pod kamerą: **Cofnij** (cofa ostatnie zliczenie), **+1 jeszcze raz** (dolicza ostatni SKU bez skanowania), **i** (podgląd odczytu, do diagnozy).
+Przyciski pod kamerą: **Cofnij** (cofa ostatnie zliczenie), **+1 jeszcze raz** (dolicza ostatni SKU bez skanowania), **Latarka** (żółta = włączona), **i** (podgląd odczytu, do diagnozy).
+
+**Latarka** pomaga w ciemnym magazynie: mniej szumu, mniej błędnych cyfr. Działa w Safari od iOS 17. Aplikacja pamięta, że była włączona, i zapala ją po Starcie i po powrocie z tła. Przy odblasku na błyszczącej naklejce przechyl lekko zawieszkę.
 
 ### Zabezpieczenia przed podwójnym zliczeniem
 
@@ -71,12 +73,20 @@ Przyciski pod kamerą: **Cofnij** (cofa ostatnie zliczenie), **+1 jeszcze raz** 
 
 ## Wysyłka
 
-**Wyślij** → **Kopiuj CSV** (albo **Pobierz plik**, **Udostępnij…**). Wklej plik w sesji czatu z podłączonym Shopify. Osobno jest lista „poza sklepem”. Nazwa pliku zaczyna się od trybu: `spis-…`, `przyjecie-…`, `wydanie-…`.
+**Wyślij** → **Kopiuj wszystko** (albo **Pobierz plik**, **Udostępnij…**). Wklej plik w sesji czatu z podłączonym Shopify. Jeden plik zawiera SKU ze sklepu i odczyty „poza sklepem”. Nazwa pliku zaczyna się od trybu: `spis-…`, `przyjecie-…`, `wydanie-…`.
 
-| Nagłówek pliku | Wpis do Shopify (lokalizacja „Vegas Jeans - Szybka 6/10”) |
+```
+sku,ilosc,status,odczyt
+101-30-94-32,2,sklep,
+101-14-110-32,1,poza_sklepem,"® | VEGAS | Materiat 14 | Model 101 | bw.pasa | 110:/ 43' | Dt.nogaw | 32”"
+```
+
+| Kolumna / wartość | Wpis do Shopify (lokalizacja „Vegas Jeans - Szybka 6/10”) |
 |---|---|
-| `sku,ilosc` | ustaw stan „dostępne” na podaną liczbę (`inventorySetQuantities`) |
-| `sku,zmiana` | zmień stan o podaną wartość, `+` dodaje, `-` odejmuje (`inventoryAdjustQuantities`). Przed wpisem sprawdź, czy wydanie nie zejdzie poniżej zera. |
+| nagłówek `sku,ilosc` | ustaw stan „dostępne” na podaną liczbę (`inventorySetQuantities`) |
+| nagłówek `sku,zmiana` | zmień stan o podaną wartość, `+` dodaje, `-` odejmuje (`inventoryAdjustQuantities`). Przed wpisem sprawdź, czy wydanie nie zejdzie poniżej zera. |
+| status `sklep` | wpisz |
+| status `poza_sklepem` | **nie wpisuj**. Kolumna `odczyt` ma tekst z OCR do wyjaśnienia: stary kod, materiał spoza sklepu albo zły odczyt. |
 
 Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic nie kasuje. Sesji może być wiele, przełącza się je w **Lista**.
 

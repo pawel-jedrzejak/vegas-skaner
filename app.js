@@ -3,7 +3,7 @@ import { preprocess } from './preprocess.js';
 import { initOCR, recognize } from './ocr.js';
 import * as store from './store.js';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
@@ -19,7 +19,7 @@ const $ = id => document.getElementById(id);
 let state = store.load();
 let skus = new Set(), mapping = {};
 let running = false, armed = false, lastAccept = 0, prev = null, agree = 0, clearCount = 0, dbg = false;
-let video, cap, ctx, audio, ocrCanvas, ocrCtx;
+let video, cap, ctx, audio, ocrCanvas, ocrCtx, track = null, torchOn = false;
 
 // ---------- UI pomocnicze ----------
 function toast(msg, ms = 1500) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), ms); }
@@ -65,7 +65,9 @@ async function start() {
     $('startInfo').textContent = 'Włączam kamerę…';
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
     video = $('video'); video.srcObject = stream; await video.play();
-    try { const [track] = stream.getVideoTracks(); const caps = track.getCapabilities ? track.getCapabilities() : {}; if (caps.focusMode && caps.focusMode.includes('continuous')) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch {}
+    track = stream.getVideoTracks()[0];
+    try { const caps = track.getCapabilities ? track.getCapabilities() : {}; if (caps.focusMode && caps.focusMode.includes('continuous')) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch {}
+    if (localStorage.getItem('vegas-skaner-torch') === '1') setTorch(true, true);
     cap = document.createElement('canvas'); ctx = cap.getContext('2d', { willReadFrequently: true });
     ocrCanvas = document.createElement('canvas'); ocrCtx = ocrCanvas.getContext('2d');
     $('start').style.display = 'none'; running = true; armed = true; setArmed();
@@ -86,6 +88,21 @@ function grabFrame() {
   cap.width = w; cap.height = h; ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
   return ctx.getImageData(0, 0, w, h);
 }
+
+// Latarka: constraint "torch" na ścieżce wideo (Safari iOS 17+, Chrome Android). iOS 18 zwraca zły stan w getSettings(),
+// więc stan trzymamy sami. iOS gasi latarkę, gdy aplikacja idzie w tło: po powrocie włączamy ponownie.
+async function setTorch(on, quiet = false) {
+  if (!track) { toast('Najpierw Start skanera'); return; }
+  try {
+    await track.applyConstraints({ advanced: [{ torch: on }] });
+    torchOn = on; $('btnTorch').classList.toggle('on', on);
+    try { localStorage.setItem('vegas-skaner-torch', on ? '1' : '0'); } catch {}
+  } catch (e) {
+    torchOn = false; $('btnTorch').classList.remove('on');
+    if (!quiet) toast('Latarka niedostępna na tym telefonie (wymaga iOS 17+)', 3000);
+  }
+}
+$('btnTorch').onclick = () => setTorch(!torchOn);
 
 async function loop() {
   while (running) {
@@ -211,13 +228,13 @@ function renderSend() {
   const s = store.current(state); $('csv').value = store.toCSV(s);
   modeBox($('sendMode'), s);
   const head = store.MODES[store.modeOf(s)].header;
-  $('sendInfo').innerHTML = `Plik CSV (<code>${head}</code>) z bieżącej sesji. Wklej go w sesji czatu z Shopify. Skaner nic nie zapisuje do sklepu.`;
-  $('csvOut').value = Object.entries(s.outside).map(([k, o]) => `${k},${o.qty},"${o.text.replace(/\n/g, ' | ').replace(/"/g, "'")}"`).join('\n') || '';
+  $('sendInfo').innerHTML = `Jeden plik CSV (<code>${head},status,odczyt</code>): SKU ze sklepu i odczyty „poza sklepem”. Wklej go w sesji czatu z Shopify. Skaner nic nie zapisuje do sklepu.`;
+  const nOut = Object.values(s.outside).reduce((a, o) => a + o.qty, 0);
+  $('sendCounts').textContent = `Sklep: ${Object.keys(s.items).length} SKU, ${store.total(s)} szt.` + (nOut ? ` · Poza sklepem: ${nOut} szt. (status poza_sklepem, nie idą do Shopify)` : '');
   $('verInfo').textContent = `Vegas Skaner ${VERSION} · ${store.MODES[store.modeOf(s)].label} · sesja „${s.name}” · ${store.fmtQty(s, store.total(s))} · lista SKU: ${skus.size}`;
 }
 async function copy(text) { try { await navigator.clipboard.writeText(text); toast('Skopiowane'); } catch { const ta = $('csv'); ta.select(); document.execCommand('copy'); toast('Skopiowane (zaznacz i kopiuj, jeśli nie)'); } }
 $('btnCopy').onclick = () => copy($('csv').value);
-$('btnCopyOut').onclick = () => copy($('csvOut').value);
 function csvFile() { const s = store.current(state); const name = `${store.MODES[store.modeOf(s)].file}-${s.name.replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.csv`; return new File([store.toCSV(s)], name, { type: 'text/csv' }); }
 $('btnDownload').onclick = () => { const f = csvFile(); const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); };
 $('btnShare').onclick = async () => { const f = csvFile(); try { if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: f.name }); else await navigator.share({ title: f.name, text: store.toCSV(store.current(state)) }); } catch (e) { if (e.name !== 'AbortError') toast('Udostępnianie niedostępne'); } };
@@ -226,6 +243,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   if (audio) audio.resume().catch(() => {});
   if (running && video && video.paused) video.play().catch(() => {}); // iOS pauzuje kamerę w tle
+  if (running && torchOn) setTimeout(() => setTorch(true, true), 300); // iOS gasi latarkę w tle
 });
 // przełączniki dźwięków (Lista)
 document.querySelectorAll('[data-sound]').forEach(cb => {

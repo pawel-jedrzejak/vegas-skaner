@@ -58,6 +58,7 @@
   #sesname.mode-spis, #sesname.mode-przyjecie, #sesname.mode-wydanie { color:#fff; padding:8px 10px; }
   .modebox { border-radius:10px; padding:10px 12px; font-size:17px; font-weight:700; color:#fff; }
   .modebox small { display:block; font-weight:400; font-size:14px; margin-top:2px; }
+  #btnTorch.on { background:var(--yel); color:#000; }
   .snd { display:flex; align-items:center; gap:10px; font-size:17px; } .snd label { flex:1; display:flex; align-items:center; gap:10px; }
   .snd input { width:26px; height:26px; flex:0 0 auto; } .snd button { width:54px; height:44px; font-size:18px; border-radius:10px; border:0; background:#333; color:var(--fg); }
 </style>
@@ -78,7 +79,8 @@
     <div id="scanbar">
       <button class="big" id="btnUndo">↶ Cofnij</button>
       <button class="big" id="btnAgain">+1 jeszcze raz</button>
-      <button class="big" id="btnDbg">i</button>
+      <button class="big" id="btnTorch">Latarka</button>
+      <button class="big" id="btnDbg" style="flex:0 0 48px">i</button>
     </div>
   </section>
 
@@ -114,12 +116,10 @@
     <div class="pad">
       <div id="sendMode" class="modebox"></div>
       <div class="mut" id="sendInfo"></div>
-      <div class="row"><button class="big grn" id="btnCopy">Kopiuj CSV</button><button class="big" id="btnDownload">Pobierz plik</button></div>
-      <button class="big" id="btnShare">Udostępnij…</button>
-      <textarea id="csv" readonly></textarea>
-      <h2>Poza sklepem</h2>
-      <textarea id="csvOut" readonly style="min-height:80px"></textarea>
-      <button class="big" id="btnCopyOut">Kopiuj „poza sklepem”</button>
+      <button class="big grn" id="btnCopy">Kopiuj wszystko</button>
+      <div class="row"><button class="big" id="btnDownload">Pobierz plik</button><button class="big" id="btnShare">Udostępnij…</button></div>
+      <div class="mut" id="sendCounts"></div>
+      <textarea id="csv" readonly style="min-height:240px"></textarea>
       <div class="mut" id="verInfo"></div>
     </div>
   </section>

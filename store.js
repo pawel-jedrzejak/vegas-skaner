@@ -1,8 +1,8 @@
 // Stan sesji w localStorage. Każda zmiana to wpis w log[] {t, sku, delta, src}, a items to suma zeskanowanych par.
 // Tryb sesji decyduje o eksporcie:
-//   spis      -> "sku,ilosc"  : policzony stan, Shopify USTAWIA stan na tę liczbę
-//   przyjecie -> "sku,zmiana" : +N, Shopify DODAJE do stanu
-//   wydanie   -> "sku,zmiana" : -N, Shopify ODEJMUJE od stanu
+//   spis      -> "sku,ilosc,status,odczyt"  : policzony stan, Shopify USTAWIA stan na tę liczbę
+//   przyjecie -> "sku,zmiana,status,odczyt" : +N, Shopify DODAJE do stanu
+//   wydanie   -> "sku,zmiana,status,odczyt" : -N, Shopify ODEJMUJE od stanu
 // items zawsze trzyma liczbę par (dodatnią); znak dokłada eksport.
 const KEY = 'vegas-skaner-v1';
 
@@ -51,11 +51,15 @@ export function undo(state) {
   save(state); return e;
 }
 export function total(s) { return Object.values(s.items).reduce((a, b) => a + b, 0); }
+// Jeden plik na sesję: SKU ze sklepu (status "sklep") i odczyty spoza sklepu (status "poza_sklepem", z tekstem z OCR).
+// Do Shopify idą tylko wiersze "sklep"; "poza_sklepem" są do wyjaśnienia (stary kod, materiał spoza sklepu, zły odczyt).
 export function toCSV(s) {
   const m = MODES[modeOf(s)];
-  const rows = Object.entries(s.items).sort(([a], [b]) => a.localeCompare(b))
-    .map(([sku, q]) => `${sku},${m.sign > 0 ? '+' + q : m.sign < 0 ? '-' + q : q}`);
-  return [m.header, ...rows].join('\n') + '\n';
+  const val = q => (m.sign > 0 ? '+' + q : m.sign < 0 ? '-' + q : String(q));
+  const esc = t => '"' + String(t || '').replace(/\s*\n\s*/g, ' | ').replace(/[ \t]{2,}/g, ' ').replace(/"/g, "'").trim() + '"';
+  const rows = Object.entries(s.items).sort(([a], [b]) => a.localeCompare(b)).map(([sku, q]) => `${sku},${val(q)},sklep,`);
+  const out = Object.entries(s.outside || {}).sort(([a], [b]) => a.localeCompare(b)).map(([k, o]) => `${k},${val(o.qty)},poza_sklepem,${esc(o.text)}`);
+  return [m.header + ',status,odczyt', ...rows, ...out].join('\n') + '\n';
 }
 
 // "101 mat. 42" / "419 B2" / "101-42" -> "101-42" (filtr sesji: kupka jednego modelu i materiału). null, gdy nie da się odczytać.
