@@ -34,7 +34,7 @@ Nie mieszaj trybów: dostawy nie skanuj w sesji spisu, bo plik ustawiłby stan n
 | 3 | Podsuń zawieszkę tak, żeby biała naklejka wypełniła ramkę na szerokość (ok. 15–20 cm od telefonu). |
 | 4 | **Wysoki podwójny pik** + duży napis `101-42-94-30 · 3 szt.` = zaliczone. Ramka żółta. |
 | 5 | Zabierz zawieszkę. **Krótkie niskie „tyk”** + zielona ramka = gotowy na kolejną parę. |
-| 6 | Żółte okno „Kod spoza listy sklepu” = odczyt nie pasuje do żadnego SKU. Stuknij **Dodaj „poza sklepem”** albo **Pomiń**. |
+| 6 | Żółte okno „Kod spoza listy sklepu” = odczyt nie pasuje do żadnego SKU, np. stary model 414. Stuknij **Dodaj „poza sklepem”** (potem zabierz zawieszkę) albo **Pomiń**. Jeśli to była pomyłka OCR i kolejna klatka da SKU ze sklepu, skaner zaliczy go sam i zamknie okno. |
 | 7 | Żółte okno „Inny model/materiał niż w tej sesji” = odczyt inny niż filtr sesji. Sprawdź zawieszkę, potem **Dodaj mimo to** albo **Pomiń**. |
 
 ### Dźwięki
@@ -51,12 +51,16 @@ Przyciski pod kamerą: **Cofnij** (cofa ostatnie zliczenie), **+1 jeszcze raz** 
 
 **Latarka** pomaga w ciemnym magazynie: mniej szumu, mniej błędnych cyfr. Działa w Safari od iOS 17. Aplikacja pamięta, że była włączona, i zapala ją po Starcie i po powrocie z tła. Przy odblasku na błyszczącej naklejce przechyl lekko zawieszkę.
 
+### Podgląd odczytu
+
+Pod ramką na żywo widać, co skaner już przeczytał, np. `Model 414 · Mat. 87 · Pas 106 · Nog. 32 · spoza sklepu`. Znak `?` przy polu = tego jeszcze nie odczytał (popraw ułożenie, światło, włącz latarkę).
+
 ### Zabezpieczenia przed podwójnym zliczeniem
 
 | Mechanizm | Jak działa |
 |---|---|
 | Dwie zgodne klatki | SKU jest zaliczany dopiero, gdy dwa kolejne odczyty dadzą ten sam kod z listy sklepu. |
-| Zawieszka musi zniknąć | Po zaliczeniu ramka robi się żółta. Skaner uzbraja się ponownie dopiero, gdy przez 2 klatki nie widzi pełnej zawieszki i minęło 1,5 s. Trzymanie tej samej zawieszki w ramce nie doliczy drugiej sztuki. Ta sama para dwa razy = trzeba ją świadomie zabrać i podsunąć ponownie. |
+| Zawieszka musi zniknąć | Po zaliczeniu ramka robi się żółta. Skaner uzbraja się ponownie dopiero, gdy przez 2 klatki nie widzi żadnej czytelnej zawieszki (brak białej naklejki albo ani modelu, ani materiału, ani pasa) i minęło 1,5 s. Niepełny odczyt tej samej zawieszki (np. nieczytelna nogawka) nie odblokowuje. Ta sama para dwa razy = trzeba ją świadomie zabrać i podsunąć ponownie. |
 | Filtr sesji | Kupka to zwykle jeden model i materiał. Odczyt innego materiału (np. `20` zamiast `40`) nie wchodzi automatycznie, tylko pyta. |
 | Kontrola pasa | Centymetry muszą zgadzać się z calami z zawieszki (`84 / 33"`): 84 cm ≈ 33". Błędna cyfra w pasie jest odrzucana. |
 | Pewność OCR | Słowa z materiałem i modelem muszą mieć pewność ≥ 75 %. |
@@ -96,7 +100,8 @@ Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic 
 |---|---|
 | OCR | [tesseract.js 6](https://github.com/naptha/tesseract.js) (Tesseract 5 LSTM, WASM SIMD) w Web Workerze, model `eng` z tessdata_fast. Pliki w `vendor/` (działa offline). |
 | Obraz | Wycinek ramki z tylnej kamery (1920×1080), skala szarości, automatyczne przycięcie do białej naklejki, progowanie Sauvola w Tesseracie, PSM 6. |
-| Parser | `parser.js`: model ∈ {101, 417, 419}, materiał (mapa `mapping.json`), pas 80–116 parzysty + zgodność z calami, nogawka ∈ {30, 32, 34}. Toleruje typowe błędy OCR (`4l7`, `941 37"`, `410` zamiast `110`, brak ukośnika). |
+| Parser | `parser.js`: model ze sklepu ∈ {101, 417, 419}, materiał (mapa `mapping.json`), pas 80–116 parzysty + zgodność z calami, nogawka ∈ {30, 32, 34}. Toleruje typowe błędy OCR (`4l7`, `941 37"`, `410` zamiast `110`, brak ukośnika). Wyraźnie przeczytany inny model (np. `414`) nie jest „poprawiany” do najbliższego, tylko idzie do „poza sklepem”. |
+| Nogawka | `lengthpass.js`: gdy brakuje tylko nogawki, drugie przejście OCR na pasku pod „Dł.nogaw.”, powiększonym ×2/×3, tryb jednej linii, tylko cyfry i `"`. Ok. 60 ms, tylko w razie potrzeby. |
 | Lista SKU | `skus.json` (1482 SKU z Shopify, 26 materiałów × 19 pasów × 3 nogawki). |
 | Stan | `store.js`, localStorage. Sesja ma tryb (spis, przyjęcie, wydanie) i log zmian. Eksport dokłada nagłówek i znak. |
 | PWA | `manifest.webmanifest` + `sw.js` (cache wszystkich plików). |
@@ -110,6 +115,8 @@ Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic 
 | Zdjęcie z zawieszkami (2 naklejki) | 2/2 SKU dobrze |
 | 120 sztucznych zawieszek (obrót ±8°, rozmycie, odblask, cień, zagięcie, szum, JPEG) | 67 dobrze, 0 źle, 5 „poza sklepem” (do potwierdzenia stuknięciem), 48 bez odczytu (najbardziej rozmyte/małe, następna klatka) |
 | Czas OCR jednej klatki (Node, ten sam WASM) | średnio 185 ms, maks. 400 ms |
+| Klatki z nagrania z magazynu (model 414, 33 klatki) | 22 pełne odczyty `414-87-106-32` → pytanie „poza sklepem”, 0 złych (przed poprawką: 0, skaner milczał) |
+| Jedna zawieszka trzymana ~10 s, nogawka co 0,3 s nieczytelna (`tools/e2e/make_hold.py`) | 1 szt. (wersja 0.4.0 liczyła 5) |
 | Test end-to-end w Chromium z podstawioną kamerą (12 zawieszek po 2 s) | 7–8 zaliczonych, 0 złych, do 1 pytania „poza sklepem”, reszta pominięta (rozmycie 2 px); ok. 1 s od pojawienia się zawieszki do pika; 150 ms na klatkę. Wynik zmienia się o 1 przy przesunięciu ramki o kilka pikseli. |
 
 ## Narzędzia deweloperskie

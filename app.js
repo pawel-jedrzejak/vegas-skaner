@@ -1,16 +1,17 @@
 import { parseTag } from './parser.js';
 import { preprocess } from './preprocess.js';
-import { initOCR, recognize } from './ocr.js';
+import { initOCR, recognize, recognizeLength } from './ocr.js';
+import { needsLengthPass, lengthRect, mergeLength } from './lengthpass.js';
 import * as store from './store.js';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
   minWidth: 520,        // mniejsze wycinki są powiększane (Tesseract chce liter ~25-40 px)
   agreeFrames: 2,       // ile kolejnych klatek musi dać to samo SKU
   lockMs: 1500,         // blokada po zaliczeniu
-  clearFrames: 2,       // ile klatek "bez zawieszki" odblokowuje kolejny skan (zabezpieczenie przed podwójnym zliczeniem)
+  clearFrames: 2,       // ile pustych klatek (bez czytelnej zawieszki) odblokowuje kolejny skan (zabezpieczenie przed podwójnym zliczeniem)
   minConf: 75,          // minimalna pewność (0-100) słowa z materiałem i modelem (pomiar: błędne odczyty materiału miały 0-76, poprawne zwykle 84-96)
   minConfLen: 50,       // minimalna pewność słowa z nogawką
 };
@@ -115,12 +116,22 @@ async function step() {
     const img = grabFrame();
     if (!img) { await new Promise(r => setTimeout(r, 100)); return; }
     const pre = preprocess(img, 'gray', true); // szarość + przycięcie do białej naklejki; progowanie robi Tesseract (Sauvola)
-    let res = { text: '', words: [], ms: 0 };
+    let res = { text: '', words: [], lines: [], ms: 0 };
     if (pre.box) { ocrCanvas.width = pre.width; ocrCanvas.height = pre.height; ocrCtx.putImageData(new ImageData(pre.data, pre.width, pre.height), 0, 0); res = await recognize(ocrCanvas); }
-    const r = parseTag(res.text, { skus, mapping });
+    let r = parseTag(res.text, { skus, mapping }); let p2 = '';
+    // brak tylko nogawki -> drugie przejście na pasku pod „Dł.nogaw.” (krótka linia „32"” bywa psuta w trybie bloku)
+    if (needsLengthPass(r)) {
+      const rect = lengthRect(res.lines, pre.width, pre.height);
+      if (rect) {
+        const ok = t => parseTag(mergeLength(res.lines, t), { skus, mapping }).status !== 'partial';
+        const l2 = await recognizeLength(ocrCanvas, rect, ok);
+        p2 = l2 ? ` +nog ${l2.text.trim()} (${l2.confidence}%, ${Math.round(l2.ms)}ms)` : ' +nog ?';
+        if (l2) { res = { ...res, text: mergeLength(res.lines, l2.text) }; r = parseTag(res.text, { skus, mapping }); r.pass2 = true; }
+      }
+    }
     r.conf = confidence(r, res.words);
     handle(r, pre.box, res.text);
-    if (dbg) $('dbg').textContent = `${Math.round(performance.now() - t0)}ms (ocr ${Math.round(res.ms)}) ${pre.box ? pre.width + 'x' + pre.height : 'brak naklejki'} ${r.status} ${r.sku || ''} conf=${r.conf ? r.conf.min + (r.conf.ok ? '' : '!') : '-'}\n${res.text.trim().split('\n').slice(0, 8).join('\n')}`;
+    if (dbg) $('dbg').textContent = `${Math.round(performance.now() - t0)}ms (ocr ${Math.round(res.ms)}${p2}) ${pre.box ? pre.width + 'x' + pre.height : 'brak naklejki'} ${r.status} ${r.sku || ''} conf=${r.conf ? r.conf.min + (r.conf.ok ? '' : '!') : '-'}\n${res.text.trim().split('\n').slice(0, 8).join('\n')}`;
     await new Promise(r => requestAnimationFrame(r));
   }
 }
@@ -135,29 +146,54 @@ function confidence(r, words) {
   return { ok, min: all.length ? Math.round(Math.min(...all)) : null };
 }
 
+// "Pusta" klatka = w ramce nie ma czytelnej zawieszki: brak białej naklejki albo OCR nie złapał ani modelu, ani materiału,
+// ani pasa. Niepełny odczyt z częścią pól (np. nogawka przeczytana jako „cyl”) to wciąż ta sama zawieszka, nie pusta ramka.
+function isClear(r, box) { const f = r.fields || {}; return !box || (!f.model && !f.materialRaw && !f.waist); }
+
 function handle(r, box, text) {
   const now = performance.now();
   const complete = r.status !== 'partial';
-  // zabezpieczenie przed podwójnym zliczeniem: po zaliczeniu zawieszka musi zniknąć z ramki (clearFrames klatek bez pełnego odczytu)
+  const clear = isClear(r, box);
+  // zabezpieczenie przed podwójnym zliczeniem: po zaliczeniu zawieszka musi zniknąć z ramki (clearFrames pustych klatek)
   if (!armed) {
-    if (!complete) clearCount++; else clearCount = 0;
-    if (clearCount >= CFG.clearFrames && now - lastAccept > CFG.lockMs) { armed = true; setArmed(); $('big').textContent = ''; if (!$('ask').classList.contains('on')) sound('ready'); }
+    if (clear) clearCount++; else clearCount = 0;
+    if (clearCount >= CFG.clearFrames && now - lastAccept > CFG.lockMs) { armed = true; askedSku = null; setArmed(); $('big').textContent = ''; if (!$('ask').classList.contains('on')) sound('ready'); }
     return;
   }
+  showReading(r);
+  if (clear) { if (++emptyCount >= CFG.clearFrames) askedSku = null; } else emptyCount = 0;
   if (!complete) { prev = null; agree = 0; return; }
   const confOk = r.conf == null || r.conf.ok;
   if (!confOk) { prev = null; agree = 0; return; }
   if (prev === r.sku) agree++; else { prev = r.sku; agree = 1; }
   if (agree < CFG.agreeFrames) return;
+  agree = 0; prev = null;
+  // kod spoza sklepu: pytanie, ale bez blokady ramki. Jeśli następne klatki dadzą SKU ze sklepu (np. pomyłka OCR),
+  // zostanie zaliczony i zamknie pytanie. To samo pytanie nie wraca, dopóki zawieszka jest w ramce.
+  if (r.status !== 'ok') {
+    if (askedSku === r.sku) return;
+    askedSku = r.sku; console.log('ACCEPT', r.status, r.sku, Math.round(now));
+    askOutside(r.sku, text); return;
+  }
   // zaliczone
-  agree = 0; prev = null; armed = false; clearCount = 0; lastAccept = now; setArmed();
+  armed = false; clearCount = 0; lastAccept = now; setArmed();
   console.log('ACCEPT', r.status, r.sku, Math.round(now));
-  if (r.status !== 'ok') { askOutside(r.sku, text); return; }
   const exp = store.current(state).expect; // np. "101-42": kupka jednego modelu i materiału
   if (exp && !r.sku.startsWith(exp + '-')) { askMismatch(r.sku, exp); return; }
   accept(r.sku);
 }
-let lastSku = null;
+let lastSku = null, askedSku = null, emptyCount = 0;
+// Podgląd na żywo pod ramką: co skaner już przeczytał. Pomaga zobaczyć, czego brakuje (np. „Model ?”).
+const HINT = 'Zawieszka w ramce, naklejka na całą szerokość';
+function showReading(r) {
+  const f = r.fields || {};
+  if (!f.model && !f.materialRaw && !f.waist && !f.length) { $('hint').textContent = HINT; return; }
+  const v = x => x || '?';
+  let t = `Model ${v(f.model)} · Mat. ${v(f.materialRaw)} · Pas ${v(f.waist)} · Nog. ${v(f.length)}`;
+  if (r.status === 'unknown') t += ' · spoza sklepu';
+  else if (r.status === 'ok' && r.conf && !r.conf.ok) t += ' · niewyraźnie';
+  $('hint').textContent = t;
+}
 function accept(sku, src = 'scan') {
   $('ask').classList.remove('on');
   const q = store.add(state, sku, 1, src); lastSku = sku; renderSessionName();
@@ -180,7 +216,10 @@ function askOutside(sku, text) {
   sound('warn'); autoHideAsk();
   $('askText').innerHTML = `<b>Kod spoza listy sklepu:</b> ${sku}<div class="mut">${(text || '').trim().split('\n').slice(0, 7).join(' · ')}</div>`;
   $('ask').classList.add('on'); $('askYes').textContent = 'Dodaj „poza sklepem”';
-  $('askYes').onclick = () => { store.addOutside(state, text.trim(), sku); $('ask').classList.remove('on'); $('big').innerHTML = `${sku}<small>poza sklepem</small>`; vibrate(40); };
+  $('askYes').onclick = () => {
+    store.addOutside(state, text.trim(), sku); $('ask').classList.remove('on'); $('big').innerHTML = `${sku}<small>poza sklepem</small>`; vibrate(40);
+    armed = false; clearCount = 0; lastAccept = performance.now(); setArmed(); renderSessionName(); // zabierz zawieszkę, potem następna
+  };
   $('askNo').onclick = () => { $('ask').classList.remove('on'); };
 }
 $('btnStart').onclick = start;

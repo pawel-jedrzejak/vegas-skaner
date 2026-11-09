@@ -3,7 +3,12 @@ import { parseTag } from '../parser.js'; import fs from 'node:fs';
 const skus = new Set(JSON.parse(fs.readFileSync('skus.json', 'utf8'))); const mapping = JSON.parse(fs.readFileSync('mapping.json', 'utf8'));
 const cases = [
   ['VEGAS®\nMateriał B2\nModel 419\nObw.pasa\n84 / 33"\nDł.nogaw.\n30"', 'ok', '419-B2-84-30'],
-  ['Laver = | § Materiat © 42 . |\nTH Modei » 401 L |\nObw.pasa e |\n94/37”\n4 §=©Dtnogaw.\n30”', 'ok', '101-42-94-30'],
+  // "401" czytelne jako 3 cyfry = możliwy inny model: pytamy, nie poprawiamy na 101
+  ['Laver = | § Materiat © 42 . |\nTH Modei » 401 L |\nObw.pasa e |\n94/37”\n4 §=©Dtnogaw.\n30”', 'unknown', '401-42-94-30'],
+  // zawieszka z nagrania 11-09: stary model 414, materiał 87 -> poza sklepem, a nie cisza
+  ['VEGAS”\nMaterial                 87\nModel             414\nObw.pasa\n106 / 42”\nDt.nogaw.\n32"', 'unknown', '414-87-106-32'],
+  ['VEGAS®\nMateriat 87\nModel 414\nObw.pasa\n106 / 42”\nDt.nogaw.\ncyl', 'partial', null],
+  ['VEGAS\nMaterial 70\nModel 4l7\nObw.pasa\n94 / 37"\nDi.nogaw.\n30"', 'ok', '417-70-94-30'],
   ['a.\n®\n= VEGAS\nMaterial     B2\nModel      419\nObw.pasa\n110 | 43"\nDt.nogaw.\n32"', 'ok', '419-B2-110-32'],
   ['VEGAS\nMaterial = 70\nModel 4l7\nObw.pasa\n106\n42"\nDinogaw.\n34"', 'ok', '417-70-106-34'],
   ['VEGAS\nMateriat 70\nModel A17\nObw.pasa\n941 37"\nDt.nogaw-\n30"', 'ok', '417-70-94-30'],

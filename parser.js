@@ -70,16 +70,22 @@ export function parseTag(text, opts = {}) {
   const f = { model: null, materialRaw: null, material: null, waist: null, inch: null, length: null };
 
   // --- model ---
+  // 1) token po "Model" daje model ze sklepu (także po typowych podmianach OCR: 4l7, A17) -> bierzemy.
+  // 2) token to czyste 3 cyfry, ale model spoza sklepu (np. stary 414) -> model "obcy": zawieszka trafi do "poza sklepem".
+  //    Nie poprawiamy go "na siłę" do najbliższego modelu: 414 mogłoby się stać 419 i dać zły SKU.
+  // 3) token z podmienionymi znakami i jedna pomylona cyfra -> tylko gdy kandydat jednoznaczny.
   const modelRe = new RegExp('MODE[LI1i}]?\\S*' + SEP + '([A-Z0-9?]{3,4})(?:\\b|$)', 'i');
   for (const l of lines) {
     const m = l.match(modelRe);
     if (!m) continue;
-    const tok = toDigits(m[1]).toUpperCase();
-    const cands = [tok]; if (tok.length === 4) cands.push(tok.slice(1), tok.slice(0, 3));
-    for (const d of cands) {
+    const raw = m[1];
+    const cands = [raw]; if (raw.length === 4) cands.push(raw.slice(1), raw.slice(0, 3));
+    for (const c of cands) { const d = toDigits(c); if (MODELS.includes(d)) { f.model = d; break; } }
+    if (f.model) break;
+    if (/^[0-9]{3}$/.test(raw)) { f.model = raw; f.modelOther = true; break; }
+    for (const c of cands) {
+      const d = toDigits(c);
       if (!/^[0-9]{3}$/.test(d)) continue;
-      if (MODELS.includes(d)) { f.model = d; break; }
-      // jedna pomylona cyfra -> tylko gdy kandydat jednoznaczny (401 -> 101; 41x -> niejednoznaczne 417/419)
       const near = MODELS.filter(mm => [0, 1, 2].filter(k => mm[k] !== d[k]).length === 1);
       if (near.length === 1) { f.model = near[0]; f.modelFuzzy = true; break; }
     }
@@ -135,6 +141,7 @@ export function parseTag(text, opts = {}) {
   const complete = f.model && f.materialRaw && f.waist && f.length;
   if (!complete) return { status: 'partial', sku: null, fields: f };
   if (!f.material) return { status: 'unknown', sku: `${f.model}-${f.materialRaw}-${f.waist}-${f.length}`, fields: f, reason: 'material' };
+  if (f.modelOther) return { status: 'unknown', sku: `${f.model}-${f.material}-${f.waist}-${f.length}`, fields: f, reason: 'model' };
   const sku = `${f.model}-${f.material}-${f.waist}-${f.length}`;
   if (opts.skus && !opts.skus.has(sku)) return { status: 'unknown', sku, fields: f, reason: 'not-in-list' };
   return { status: 'ok', sku, fields: f };

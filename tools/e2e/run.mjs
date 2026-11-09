@@ -14,7 +14,8 @@ await page.click('#btnStart');
 await page.waitForSelector('#start', { state: 'hidden', timeout: 120000 });
 console.log('skaner wystartował po', Date.now() - t0, 'ms');
 await page.click('#btnDbg');
-const dur = expected.length * 3000 + 2500; // film: 2 s czerni + (2 s zawieszka + 1 s czerń) x N; nie czekaj do zapętlenia
+// film: 2 s czerni + (2 s zawieszka + 1 s czerń) x N; nie czekaj do zapętlenia. DUR_MS nadpisuje (inne filmy).
+const dur = process.env.DUR_MS ? +process.env.DUR_MS : expected.length * 3000 + 2500;
 await page.waitForTimeout(dur);
 await page.screenshot({ path: 'tools/e2e/last.png' });
 const st = await page.evaluate(() => JSON.parse(localStorage.getItem('vegas-skaner-v1')));
