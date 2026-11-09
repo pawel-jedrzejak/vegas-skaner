@@ -33,7 +33,9 @@ const cases = [
   ['VEGAS\nMaterial 8Z\nModel 419\n84 / 33"\nnogaw\n32"', 'ok', '419-B2-84-32'],                       // 8->B, Z->2
   ['VEGAS\nMaterial B0\nModel 419\n84 / 33"\nnogaw\n32"', 'partial', null],                             // nieczytelne: czytaj dalej
   ['VEGAS\nMaterial B2A\nModel 419\n106 / 42"\nnogaw\n30"', 'partial', null],
-  ['VEGAS\nMaterial B\nModel 419\n84 / 33"\nnogaw\n32"', 'unknown', '419-B-84-32'],                    // samo B: zapytaj
+  ['VEGAS\nMaterial B\nModel 419\n84 / 33"\nnogaw\n32"', 'ok', '419-BK-84-32'],                       // B = BLACK = czerń (potwierdzone 11-09)
+  ['VEGAS\nMaterial b\nModel 419\n84 / 33"\nnogaw\n32"', 'ok', '419-BK-84-32'],
+  ['VEGAS\nMaterial B\nModel 101\n84 / 33"\nnogaw\n32"', 'unknown', '101-B-84-32'],                    // alias tylko dla 419
   ['VEGAS\nMaterial Black\nModel 419\n84 / 33"\nnogaw\n32"', 'ok', '419-BK-84-32'],
   ['VEGAS\nMaterial BLACK\nModel 419\n84 / 33"\nnogaw\n32"', 'ok', '419-BK-84-32'],
   ['VEGAS\nMateriat ©2\nModel 419\n82 / 32"\nnogaw\n32"', 'partial', null],                            // dziwny znak + 1 cyfra

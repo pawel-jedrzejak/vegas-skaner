@@ -4,7 +4,7 @@ import { initOCR, recognize, recognizeLength } from './ocr.js';
 import { needsLengthPass, lengthRect, mergeLength } from './lengthpass.js';
 import * as store from './store.js';
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.6.1';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
