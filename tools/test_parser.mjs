@@ -23,7 +23,16 @@ const cases = [
   ['VEGAS\nMateria 70\nMode} 417\nCbw.pasa\n89 if 31"\nD .nogaw,\n34"', 'partial', null],          // 80 -> 89
   ['VEGAS\nMaterial 70\nModel Ali\nObw.pasa\n86 | 34"\nDi.nogaw.\n30"', 'partial', null],           // 411: 417 czy 419?
   ['VEGAS\nMaterial 70\nModel 417\nObw.pasa\n94 / 33"\nDi.nogaw.\n30"', 'partial', null],           // cale nie pasują do cm
-  ['VEGAS\nMaterial 70\nModel 417\nObw.pasa\n94 / 37"\nDi.nogaw.\n36"', 'partial', null],           // nogawka 36 nie istnieje
+  ['VEGAS\nMaterial 70\nModel 417\nObw.pasa\n94 / 37"\nDi.nogaw.\n38"', 'partial', null],           // nogawka 38 nie istnieje
+  // nogawka 36 (jest na zawieszkach, nie ma w sklepie) -> poza sklepem, nie cisza
+  ['VEGAS\nMaterial B2\nModel 419\nObw.pasa\n94 / 37"\nDł.nogaw.\n36"', 'unknown', '419-B2-94-36'],
+  // modele damskie: 3 albo 4 cyfry od 3 -> poza sklepem; pas także nieparzysty i poniżej 80
+  ['VEGAS\nMaterial 87\nModel 3333\nObw.pasa\n70 / 28"\nDł.nogaw.\n32"', 'unknown', '3333-87-70-32'],
+  ['VEGAS\nMaterial 5\nModel 317\nObw.pasa\n66 / 26"\nDł.nogaw.\n30"', 'unknown', '317-05-66-30'],
+  ['VEGAS\nMaterial 12\nModel 3333\nObw.pasa\n69 / 27"\nDł.nogaw.\n34"', 'unknown', '3333-12-69-34'],
+  ['VEGAS\nMaterial 12\nModel 3333\nObw.pasa\n69 / 31"\nDł.nogaw.\n34"', 'partial', null],          // cale nie pasują
+  // model ze sklepu: pas nadal tylko 80–116 parzysty (85 = błąd OCR -> czytaj dalej)
+  ['VEGAS\nMaterial B2\nModel 419\nObw.pasa\n85 / 33"\nDł.nogaw.\n32"', 'partial', null],
   ['VEGAS\nMaterial 55\nModel 419\nObw.pasa\n94 / 37"\nDi.nogaw.\n30"', 'unknown', '419-55-94-30'], // materiał spoza sklepu
   ['VEGAS\nMaterial 42\nModel 419\nObw.pasa\n94 / 37"\nDi.nogaw.\n30"', 'unknown', '419-42-94-30'], // 42 jest w 101, nie w 419
   ['VEGAS *\n116\n46"\noe', 'partial', null],

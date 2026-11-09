@@ -63,7 +63,9 @@ Pod ramką na żywo widać, co skaner już przeczytał, np. `Model 414 · Mat. 8
 | Zawieszka musi zniknąć | Po zaliczeniu ramka robi się żółta. Skaner uzbraja się ponownie dopiero, gdy przez 2 klatki w ramce nie ma dużej białej naklejki (co najmniej 8% ramki) **i** OCR nic nie czyta, oraz minęło 1,5 s. Rozmazana klatka przy ruchu ręki ani niepełny odczyt tej samej zawieszki nie odblokowują. Ta sama para dwa razy = trzeba ją świadomie zabrać z ramki i podsunąć ponownie. Jeśli ramka zostaje żółta mimo zabrania zawieszki, odsuń telefon od kupki na chwilę. |
 | Filtr sesji | Kupka to zwykle jeden model i materiał. Odczyt innego materiału (np. `20` zamiast `40`) nie wchodzi automatycznie, tylko pyta. Bez filtra w nazwie sesji skaner pyta przy pierwszym skanie każdego nowego modelu/materiału w sesji (np. same B2, nagle 02: zgubione „B”). |
 | Walidacja materiału | Materiał musi być kodem danego modelu z listy SKU (419: 92, 05, 02, 94, BK, B2, PO), zapisanym jak na zawieszce: `B2`/`b2` (sprana czerń), `B`/`BLACK` (czerń = BK), `2` = 02, `P` = PO. Pomyłki OCR poprawiane tylko jednoznacznie (`BZ` → B2). Śmieci (`B0`, `B2A`) = czytaj dalej, bez pytania. Czyste cyfry spoza listy (`14`) albo nieznane litery = pytanie „poza sklepem”. Zgubione „2” z „B2” daje `B` = BK: łapie to pytanie o nowy materiał w sesji. |
-| Kontrola pasa | Centymetry muszą zgadzać się z calami z zawieszki (`84 / 33"`): 84 cm ≈ 33". Błędna cyfra w pasie jest odrzucana. |
+| Kontrola pasa | Centymetry muszą zgadzać się z calami z zawieszki (`84 / 33"`): 84 cm ≈ 33". Błędna cyfra w pasie jest odrzucana. Modele ze sklepu: 80–116 parzyste. Modele spoza sklepu (np. damskie): 56–130, także nieparzyste (27" = 69 cm). |
+| Nogawka | Na zawieszkach: 28, 30, 32, 34, 36. W sklepie tylko 30/32/34, więc np. `419-B2-94-36` trafia do „poza sklepem”. |
+| Modele damskie | Numer od 3, 3 albo 4 cyfry (`317`, `3333`). Nie ma ich w sklepie: pierwsza para danego modelu i materiału w sesji pyta „poza sklepem”, kolejne wchodzą od razu (pik + „poza sklepem · N szt.”). |
 | Pewność OCR | Słowa z materiałem i modelem muszą mieć pewność ≥ 75 %. |
 | Lista SKU | Kod jest zaliczany tylko, jeśli istnieje w sklepie (1482 warianty). |
 
@@ -118,6 +120,8 @@ Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic 
 | Walidacja materiału (testy parsera: BZ, b2, 8Z, B0, B2A, B, Black, ©2, 2, 82, P) | 37/37 |
 | Aktualizacja PWA z nagłówkami jak GitHub Pages (`tools/e2e/update_test.mjs`) | 0.6.1 → 0.6.2 i 0.6.2 → kolejna: nowa wersja od 1. otwarcia (0.6.1 → kolejna: utykała na starej) |
 | Sesja z samymi B2, potem zawieszka 419-02 (`tools/e2e/new_material.mjs`) | pytanie „Nowy model/materiał”, bez stuknięcia nic nie dolicza |
+| Dwie pary 414 (spoza sklepu) w jednej sesji (`tools/e2e/outside_auto.mjs`) | 1 pytanie, druga para dodana sama, sklep bez zmian |
+| Testy parsera: nogawka 36, modele damskie 317/3333, pas 66/69/70 cm | 43/43 |
 | „+1” po „Dodaj poza sklepem” (`tools/e2e/bug_again.mjs`) | dolicza 414 poza sklepem; kod ze sklepu bez zmian (do 0.5.1 doliczał poprzedni kod ze sklepu) |
 | Zdjęcie z zawieszkami (2 naklejki) | 2/2 SKU dobrze |
 | 120 sztucznych zawieszek (obrót ±8°, rozmycie, odblask, cień, zagięcie, szum, JPEG) | 67 dobrze, 0 źle, 5 „poza sklepem” (do potwierdzenia stuknięciem), 48 bez odczytu (najbardziej rozmyte/małe, następna klatka) |

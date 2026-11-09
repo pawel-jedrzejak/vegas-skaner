@@ -1,7 +1,7 @@
 // Service worker: wszystko w cache po pierwszym wczytaniu -> działa bez sieci. Zmień VERSION, żeby wymusić odświeżenie.
 // WAŻNE: pliki nowej wersji pobieramy z pominięciem pamięci HTTP przeglądarki (cache: 'reload'). GitHub Pages pozwala
 // trzymać pliki 10 min (max-age=600); bez tego nowa wersja zapisywała u siebie STARY app.js (11-09: telefon utknął na 0.6.0).
-const VERSION = 'vegas-skaner-v0.6.2';
+const VERSION = 'vegas-skaner-v0.7.0';
 const FILES = [
   './', 'index.html', 'app.js', 'parser.js', 'preprocess.js', 'ocr.js', 'store.js', 'lengthpass.js', 'skus.json', 'mapping.json', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

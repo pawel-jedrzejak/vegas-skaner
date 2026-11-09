@@ -4,7 +4,7 @@ import { initOCR, recognize, recognizeLength } from './ocr.js';
 import { needsLengthPass, lengthRect, mergeLength } from './lengthpass.js';
 import * as store from './store.js';
 
-export const VERSION = '0.6.2';
+export const VERSION = '0.7.0';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
@@ -180,6 +180,18 @@ function handle(r, pre, text) {
   // zostanie zaliczony i zamknie pytanie. To samo pytanie nie wraca, dopóki zawieszka jest w ramce.
   if (r.status !== 'ok') {
     if (askedSku === r.sku) return;
+    // ten model/materiał już potwierdzony w tej sesji jako „poza sklepem” (np. spis damskich 3333-87)?
+    // -> dolicz od razu, bez pytania (nie trafia do Shopify, więc pomyłka nie zmieni stanów)
+    const cur = store.current(state), mm = r.sku.split('-').slice(0, 2).join('-');
+    if (Object.keys(cur.outside || {}).some(k => k.startsWith(mm + '-'))) {
+      armed = false; clearCount = 0; lastAccept = now; setArmed();
+      console.log('ACCEPT outside-auto', r.sku, Math.round(now));
+      const q = store.addOutside(state, text.trim(), r.sku);
+      $('ask').classList.remove('on');
+      $('big').innerHTML = `${r.sku}<small>poza sklepem · ${q} szt.</small>`;
+      const f = $('frame'); f.classList.add('hit'); setTimeout(() => f.classList.remove('hit'), 400);
+      sound('scanned'); vibrate(40); renderSessionName(); return;
+    }
     askedSku = r.sku; console.log('ACCEPT', r.status, r.sku, Math.round(now));
     askOutside(r.sku, text); return;
   }

@@ -10,8 +10,11 @@
 // Zasada: lepiej nic nie odczytać (partial) niż odczytać źle. Każde pole ma kontrolę:
 // model ∈ {101,417,419}, pas 80–116 parzysty i zgodny z calami (cm/2.54), nogawka ∈ {30,32,34}, SKU na liście sklepu.
 
-export const MODELS = ['101', '417', '419'];
-export const LENGTHS = ['30', '32', '34'];
+export const MODELS = ['101', '417', '419'];           // modele w sklepie
+// Nogawki na zawieszkach: w sklepie są 30/32/34, ale bywa też 36 (11-09). Zawieszka z 36 trafia do „poza sklepem”.
+export const LENGTHS = ['28', '30', '32', '34', '36'];
+// Modele damskie: zaczynają się od 3, mają 3 albo 4 cyfry (np. 317, 3333). Nie ma ich w sklepie -> „poza sklepem”.
+const WOMEN_RE = /^3[0-9]{2,3}$/;
 
 const DIGIT_FIX = { O: '0', o: '0', D: '0', Q: '0', U: '0', I: '1', l: '1', '|': '1', i: '1', '!': '1', ']': '1', '[': '1', Z: '2', z: '2', S: '5', s: '5', B: '8', G: '6', T: '7', A: '4', q: '9', g: '9' };
 function toDigits(s) { return [...s].map(c => (/[0-9]/.test(c) ? c : (DIGIT_FIX[c] ?? c))).join(''); }
@@ -62,7 +65,7 @@ export function resolveMaterial(model, raw, opts = {}) {
   if (!dict) { // model spoza sklepu albo brak listy SKU: bez walidacji
     const perModel = (opts.mapping && opts.mapping[model]) || {};
     if (perModel[m]) return { code: perModel[m], how: 'exact' };
-    if (/^[0-9]{1,2}$/.test(m) || /^[A-Z][0-9]$/.test(m)) return { code: pad(m), how: 'other' };
+    if (/^[0-9]{1,3}$/.test(m) || /^[A-Z][0-9]{1,2}$/.test(m) || /^[A-Z]{1,3}$/.test(m)) return { code: pad(m), how: 'other' };
     return null;
   }
   if (dict[m]) return { code: dict[m], how: 'exact' };
@@ -75,11 +78,14 @@ export function resolveMaterial(model, raw, opts = {}) {
 // Zgodność wstecz (testy, narzędzia): sam kod albo null
 export function mapMaterial(model, raw, mapping, skus) { const r = resolveMaterial(model, raw, { mapping, skus }); return r ? r.code : null; }
 
-const cmOk = cm => cm >= 80 && cm <= 116 && cm % 2 === 0;
+// Pas w cm: modele ze sklepu 80–116 i tylko parzyste (jak w sklepie; nieparzyste to zwykle błąd OCR).
+// Modele spoza sklepu (np. damskie): 56–130, także nieparzyste (26" = 66 cm, 27" = 69 cm). Zawsze musi pasować do cali.
+const cmShop = cm => cm >= 80 && cm <= 116 && cm % 2 === 0;
+const cmAny = cm => cm >= 56 && cm <= 130;
 const inchOk = (cm, inch) => Math.abs(cm / 2.54 - inch) <= 1.3;
 
 // Kandydaci na "cm" z jednego ciągu cyfr (OCR gubi/dokleja znaki: "410"->110, "941"->94, "116146"->116+46).
-function cmCandidates(run) {
+function cmCandidates(run, cmOk) {
   const c = new Set();
   if (run.length >= 2 && run.length <= 3) c.add(run);
   if (run.length >= 3) { c.add(run.slice(0, 2)); c.add(run.slice(0, 3)); }
@@ -114,6 +120,7 @@ export function parseTag(text, opts = {}) {
     const m = l.match(modelRe);
     if (!m) continue;
     const raw = m[1];
+    if (WOMEN_RE.test(raw)) { f.model = raw; f.modelOther = true; f.women = true; break; } // czysty numer damski, np. 317, 3333
     const cands = [raw]; if (raw.length === 4) cands.push(raw.slice(1), raw.slice(0, 3));
     for (const c of cands) { const d = toDigits(c); if (MODELS.includes(d)) { f.model = d; break; } }
     if (f.model) break;
@@ -155,12 +162,13 @@ export function parseTag(text, opts = {}) {
   }
 
   // --- pas: "84 / 33"" --- cm i cale muszą do siebie pasować
+  const cmOk = f.modelOther ? cmAny : cmShop;
   const runsOf = l => toDigits(l.replace(/[\/|\\\[\]]/g, ' ')).split(/[^0-9]+/).filter(Boolean);
   outer: for (let i = 0; i < lines.length; i++) {
     if (/MODE|MATER/i.test(lines[i])) continue; // nie bierz "Model 419" za pas
     const runs = runsOf(lines[i] + ' ' + (lines[i + 1] && !/NOGAW|OGAW/i.test(lines[i + 1]) ? lines[i + 1] : ''));
     for (let a = 0; a < runs.length; a++) {
-      for (const cm of cmCandidates(runs[a])) {
+      for (const cm of cmCandidates(runs[a], cmOk)) {
         for (const inch of inchCandidates(runs[a], runs.slice(a + 1, a + 4))) {
           if (inchOk(cm, inch)) { f.waist = String(cm); f.inch = inch; break outer; }
         }
@@ -170,7 +178,7 @@ export function parseTag(text, opts = {}) {
 
   // --- nogawka: linia "nogaw" i następne, albo samodzielne 30"/32"/34" ---
   const pickLoose = l => { const r = runsOf(l); for (const run of r) { const d = run.slice(0, 2); if (LENGTHS.includes(d) && run.length <= 3) return d; } return null; };
-  const pickStrict = l => { const m = l.match(/(?:^|\s)([0-9OIlDQ]{2})\s*"(?:\s|$)|(?:^|\s)(30|32|34)(?:\s|$)/); if (!m) return null; const d = toDigits(m[1] || m[2]); return LENGTHS.includes(d) ? d : null; };
+  const pickStrict = l => { const m = l.match(/(?:^|\s)([0-9OIlDQ]{2})\s*"(?:\s|$)|(?:^|\s)(28|30|32|34|36)(?:\s|$)/); if (!m) return null; const d = toDigits(m[1] || m[2]); return LENGTHS.includes(d) ? d : null; };
   const ni = lines.findIndex(l => /NOGAW|OGAW|NOGA/i.test(l));
   if (ni >= 0) {
     f.length = pickLoose(lines[ni].replace(/.*(NOGAW|OGAW|NOGA)\S*/i, '')) || (lines[ni + 1] ? pickLoose(lines[ni + 1]) : null) || (lines[ni + 2] ? pickLoose(lines[ni + 2]) : null);
