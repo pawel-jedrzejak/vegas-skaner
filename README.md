@@ -47,7 +47,7 @@ Nie mieszaj trybów: dostawy nie skanuj w sesji spisu, bo plik ustawiłby stan n
 
 Dźwięki grają też przy włączonym wyciszeniu (iOS 16.4+). Głośność ustawiasz przyciskami iPhone'a. W **Lista → Dźwięki** każdy dźwięk można wyłączyć i odsłuchać (▶). iPhone nie pozwala stronom na wibracje, więc zostaje dźwięk i kolor ramki.
 
-Przyciski pod kamerą: **Cofnij** (cofa ostatnie zliczenie), **+1 jeszcze raz** (dolicza ostatni SKU bez skanowania), **Latarka** (żółta = włączona), **i** (podgląd odczytu, do diagnozy).
+Przyciski pod kamerą: **Cofnij** (cofa ostatnie zliczenie), **+1 jeszcze raz** (dolicza jeszcze jedną sztukę tego, co dodano ostatnio w tej sesji, także „poza sklepem”; pod napisem widać, co doliczy), **Latarka** (żółta = włączona), **i** (podgląd odczytu, do diagnozy).
 
 **Latarka** pomaga w ciemnym magazynie: mniej szumu, mniej błędnych cyfr. Działa w Safari od iOS 17. Aplikacja pamięta, że była włączona, i zapala ją po Starcie i po powrocie z tła. Przy odblasku na błyszczącej naklejce przechyl lekko zawieszkę.
 
@@ -111,7 +111,8 @@ Stan sesji jest w pamięci przeglądarki (localStorage): zamknięcie Safari nic 
 | Test | Wynik |
 |---|---|
 | Parser (testy jednostkowe) | 19/19 |
-| Sesje i eksport w 3 trybach (testy jednostkowe) | wszystkie OK |
+| Sesje i eksport w 3 trybach, cel przycisku „+1” (testy jednostkowe) | wszystkie OK |
+| „+1” po „Dodaj poza sklepem” (`tools/e2e/bug_again.mjs`) | dolicza 414 poza sklepem; kod ze sklepu bez zmian (do 0.5.1 doliczał poprzedni kod ze sklepu) |
 | Zdjęcie z zawieszkami (2 naklejki) | 2/2 SKU dobrze |
 | 120 sztucznych zawieszek (obrót ±8°, rozmycie, odblask, cień, zagięcie, szum, JPEG) | 67 dobrze, 0 źle, 5 „poza sklepem” (do potwierdzenia stuknięciem), 48 bez odczytu (najbardziej rozmyte/małe, następna klatka) |
 | Czas OCR jednej klatki (Node, ten sam WASM) | średnio 185 ms, maks. 400 ms |

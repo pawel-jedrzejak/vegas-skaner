@@ -4,7 +4,7 @@ import { initOCR, recognize, recognizeLength } from './ocr.js';
 import { needsLengthPass, lengthRect, mergeLength } from './lengthpass.js';
 import * as store from './store.js';
 
-export const VERSION = '0.5.1';
+export const VERSION = '0.5.2';
 // --- parametry skanera ---
 const CFG = {
   ocrWidth: 720,        // maks. szerokość wycinka podawanego do OCR (px)
@@ -190,7 +190,7 @@ function handle(r, pre, text) {
   if (exp && !r.sku.startsWith(exp + '-')) { askMismatch(r.sku, exp); return; }
   accept(r.sku);
 }
-let lastSku = null, askedSku = null, emptyCount = 0, finderPref = 'sticker';
+let askedSku = null, emptyCount = 0, finderPref = 'sticker';
 // Podgląd na żywo pod ramką: co skaner już przeczytał. Pomaga zobaczyć, czego brakuje (np. „Model ?”).
 const HINT = 'Zawieszka w ramce, naklejka na całą szerokość';
 function showReading(r) {
@@ -204,7 +204,7 @@ function showReading(r) {
 }
 function accept(sku, src = 'scan') {
   $('ask').classList.remove('on');
-  const q = store.add(state, sku, 1, src); lastSku = sku; renderSessionName();
+  const q = store.add(state, sku, 1, src); renderSessionName();
   const cur = store.current(state), mode = store.modeOf(cur);
   $('big').innerHTML = mode === 'spis' ? `${sku}<small>${q} szt. w sesji</small>`
     : `${mode === 'wydanie' ? '−1' : '+1'} · ${sku}<small>${store.MODES[mode].label}: razem ${store.fmtQty(cur, q)}</small>`;
@@ -225,21 +225,34 @@ function askOutside(sku, text) {
   $('askText').innerHTML = `<b>Kod spoza listy sklepu:</b> ${sku}<div class="mut">${(text || '').trim().split('\n').slice(0, 7).join(' · ')}</div>`;
   $('ask').classList.add('on'); $('askYes').textContent = 'Dodaj „poza sklepem”';
   $('askYes').onclick = () => {
-    store.addOutside(state, text.trim(), sku); $('ask').classList.remove('on'); $('big').innerHTML = `${sku}<small>poza sklepem</small>`; vibrate(40);
+    const q = store.addOutside(state, text.trim(), sku); $('ask').classList.remove('on'); $('big').innerHTML = `${sku}<small>poza sklepem · ${q} szt.</small>`; vibrate(40);
     armed = false; clearCount = 0; lastAccept = performance.now(); setArmed(); renderSessionName(); // zabierz zawieszkę, potem następna
   };
   $('askNo').onclick = () => { $('ask').classList.remove('on'); };
 }
 $('btnStart').onclick = start;
 $('btnUndo').onclick = () => { const e = store.undo(state); if (e) { const cur = store.current(state); toast(`Cofnięto ${e.sku}`); $('big').innerHTML = `${e.sku}<small>cofnięte · zostaje ${store.fmtQty(cur, cur.items[e.sku] || 0)}</small>`; renderSessionName(); } else toast('Nie ma czego cofać'); };
-$('btnAgain').onclick = () => { if (lastSku) accept(lastSku, 'again'); else toast('Najpierw zeskanuj coś'); };
+// przyciski −/+ na liście też zmieniają to, co doliczy „+1”
+// „+1 jeszcze raz”: dolicza dokładnie to, co pokazuje przycisk (ostatni wpis bieżącej sesji), także „poza sklepem”
+$('btnAgain').onclick = () => {
+  const last = store.lastEntry(store.current(state));
+  if (!last) { toast('Najpierw zeskanuj coś'); return; }
+  if (last.outside) {
+    const q = store.addOutside(state, last.text, last.sku);
+    $('big').innerHTML = `${last.sku}<small>poza sklepem · ${q} szt.</small>`; sound('scanned'); vibrate(40); renderSessionName();
+  } else accept(last.sku, 'again');
+};
 $('btnDbg').onclick = () => { dbg = !dbg; $('dbg').textContent = ''; };
 
 // ---------- lista ----------
 function renderSessionName() {
   const s = store.current(state), mode = store.modeOf(s);
   const el = $('sesname'); el.className = 'mode-' + mode;
-  el.textContent = `${store.MODES[mode].label.toUpperCase()} · ${s.name}${s.expect ? ' · filtr ' + s.expect : ''} · ${store.fmtQty(s, store.total(s))}`;
+  const out = store.totalOutside(s);
+  el.textContent = `${store.MODES[mode].label.toUpperCase()} · ${s.name}${s.expect ? ' · filtr ' + s.expect : ''} · ${store.fmtQty(s, store.total(s))}${out ? ' · poza sklepem ' + out : ''}`;
+  // przycisk „+1” pokazuje, co doliczy
+  const last = store.lastEntry(s);
+  $('btnAgain').innerHTML = last ? `+1 jeszcze raz<small>${last.sku}${last.outside ? ' (poza)' : ''}</small>` : '+1 jeszcze raz<small>—</small>';
 }
 const MODE_HELP = {
   spis: 'Policz wszystko, co leży na półce. Plik ustawi stan w sklepie na policzoną liczbę.',
@@ -256,19 +269,19 @@ function renderList() {
   $('listSummary').textContent = `${Object.keys(s.items).length} SKU, ${store.total(s)} szt. ${what}. Przyciski −/+ zmieniają liczbę par.`;
   const rows = Object.entries(s.items).sort(([a], [b]) => a.localeCompare(b));
   $('tbl').innerHTML = rows.map(([sku, q]) => `<tr><td class="sku">${sku}</td><td class="q">${q}</td><td class="btns"><button data-sku="${sku}" data-d="-1">−</button><button data-sku="${sku}" data-d="1">+</button></td></tr>`).join('') || '<tr><td class="mut">Pusto. Skanuj albo dopisz ręcznie.</td></tr>';
-  $('tbl').querySelectorAll('button').forEach(b => b.onclick = () => { store.add(state, b.dataset.sku, +b.dataset.d, 'manual'); renderList(); });
+  $('tbl').querySelectorAll('button').forEach(b => b.onclick = () => { store.add(state, b.dataset.sku, +b.dataset.d, 'manual'); renderList(); renderSessionName(); });
   const out = Object.entries(s.outside);
   $('tblOut').innerHTML = out.map(([k, o]) => `<tr class="outside"><td class="sku">${k}<div class="mut">${o.text.split('\n').slice(0, 7).join(' · ')}</div></td><td class="q">${o.qty}</td></tr>`).join('') || '<tr><td class="mut">—</td></tr>';
 }
-$('btnNewSes').onclick = () => { const n = $('sesInput').value.trim(); if (!n) { toast('Wpisz nazwę sesji'); return; } const mode = $('sesMode').value; const s = store.newSession(state, n, mode); s.expect = store.expectFromName(n, mapping); store.save(state); $('sesInput').value = ''; renderList(); toast(`Nowa sesja (${store.MODES[mode].label}): ${n}`); };
+$('btnNewSes').onclick = () => { const n = $('sesInput').value.trim(); if (!n) { toast('Wpisz nazwę sesji'); return; } const mode = $('sesMode').value; const s = store.newSession(state, n, mode); s.expect = store.expectFromName(n, mapping); store.save(state); $('sesInput').value = ''; renderList(); renderSessionName(); $('big').textContent = ''; toast(`Nowa sesja (${store.MODES[mode].label}): ${n}`); };
 $('expect').onchange = e => { const v = e.target.value.trim().toUpperCase().replace(/\s+/g, ''); if (v && !/^(101|417|419)-[A-Z0-9]{2}$/.test(v)) { toast('Format: model-materiał, np. 101-42', 2500); return; } store.current(state).expect = v; store.save(state); toast(v ? 'Filtr sesji: ' + v : 'Filtr wyłączony'); };
-$('sesSelect').onchange = e => { state.currentId = e.target.value; store.save(state); renderList(); };
+$('sesSelect').onchange = e => { state.currentId = e.target.value; store.save(state); renderList(); renderSessionName(); $('big').textContent = ''; };
 $('btnManual').onclick = () => {
   const sku = $('manualSku').value.trim().toUpperCase().replace(/\s+/g, '');
   if (!skus.has(sku)) { toast('Nie ma takiego SKU na liście sklepu', 2500); return; }
-  store.add(state, sku, 1, 'manual'); $('manualSku').value = ''; renderList(); sound('scanned');
+  store.add(state, sku, 1, 'manual'); $('manualSku').value = ''; renderList(); renderSessionName(); sound('scanned');
 };
-$('btnDelSes').onclick = () => { const s = store.current(state); if (!confirm(`Usunąć sesję „${s.name}” (${store.total(s)} szt.)?`)) return; state.sessions = state.sessions.filter(x => x.id !== s.id); state.currentId = state.sessions[0]?.id || null; store.save(state); renderList(); };
+$('btnDelSes').onclick = () => { const s = store.current(state); if (!confirm(`Usunąć sesję „${s.name}” (${store.total(s)} szt.)?`)) return; state.sessions = state.sessions.filter(x => x.id !== s.id); state.currentId = state.sessions[0]?.id || null; store.save(state); renderList(); renderSessionName(); $('big').textContent = ''; };
 
 // ---------- wyślij ----------
 function renderSend() {

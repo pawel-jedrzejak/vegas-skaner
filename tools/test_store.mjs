@@ -33,6 +33,23 @@ store.addOutside(st, 'Material 14\nModel 101', '101-14-108-32'); store.addOutsid
 eq(store.toCSV(sp), 'sku,ilosc,status,odczyt\n101-42-94-30,2,sklep,\n101-42-96-30,1,sklep,\n101-14-108-32,2,poza_sklepem,"Material 14 | Model 101"\n', 'spis + poza sklepem x2');
 store.undo(st); store.undo(st);
 
+// „+1 jeszcze raz” = ostatni dodatni wpis bieżącej sesji (błąd z 11-09: po „poza sklepem” doliczał poprzedni kod ze sklepu)
+{
+  const t = store.newSession(st, 'Półka testowa');
+  eq(store.lastEntry(t), null, 'pusta sesja: nic do doliczenia');
+  store.add(st, '419-B2-106-30');
+  eq(JSON.stringify(store.lastEntry(t)), JSON.stringify({ sku: '419-B2-106-30', outside: false }), 'po skanie ze sklepu');
+  store.addOutside(st, 'Material 87\nModel 414', '414-87-108-32');
+  eq(JSON.stringify(store.lastEntry(t)), JSON.stringify({ sku: '414-87-108-32', outside: true, text: 'Material 87\nModel 414' }), 'po poza sklepem: +1 dolicza 414, nie 419');
+  store.undo(st);
+  eq(store.lastEntry(t).sku, '419-B2-106-30', 'po cofnięciu wraca poprzedni');
+  store.add(st, '419-B2-106-30', -1, 'manual');
+  eq(store.lastEntry(t), null, 'po −1 do zera: nic do doliczenia');
+  eq(store.totalOutside(t), 0, 'poza sklepem po cofnięciu = 0');
+  st.currentId = sp.id;
+  eq(store.lastEntry(store.current(st)).sku, '101-42-96-30', 'inna sesja: jej własny ostatni wpis');
+}
+
 // sesje są rozdzielne, stara sesja bez pola mode = spis
 st.currentId = sp.id; eq(store.toCSV(store.current(st)), 'sku,ilosc,status,odczyt\n101-42-94-30,2,sklep,\n101-42-96-30,1,sklep,\n', 'powrót do sesji spisu');
 eq(store.modeOf({ items: {} }), 'spis', 'stara sesja bez trybu');

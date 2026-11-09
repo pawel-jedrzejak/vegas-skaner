@@ -50,6 +50,19 @@ export function undo(state) {
   else { s.items[e.sku] = (s.items[e.sku] || 0) - e.delta; if (s.items[e.sku] <= 0) delete s.items[e.sku]; }
   save(state); return e;
 }
+// Ostatni dodatni wpis w dzienniku sesji: to dolicza przycisk „+1 jeszcze raz”. Zwraca {sku, outside, text} albo null.
+// Liczone z dziennika bieżącej sesji, więc po zmianie sesji, cofnięciu czy dodaniu „poza sklepem” zawsze zgadza się z tym,
+// co widać (błąd z 11-09: „+1” po „poza sklepem” doliczał poprzedni kod ze sklepu).
+export function lastEntry(s) {
+  for (let i = (s.log || []).length - 1; i >= 0; i--) {
+    const e = s.log[i];
+    if (e.delta <= 0) continue;
+    if (e.src === 'outside') { const o = (s.outside || {})[e.sku]; if (o) return { sku: e.sku, outside: true, text: o.text }; continue; }
+    if ((s.items || {})[e.sku]) return { sku: e.sku, outside: false };
+  }
+  return null;
+}
+export function totalOutside(s) { return Object.values(s.outside || {}).reduce((a, o) => a + o.qty, 0); }
 export function total(s) { return Object.values(s.items).reduce((a, b) => a + b, 0); }
 // Jeden plik na sesję: SKU ze sklepu (status "sklep") i odczyty spoza sklepu (status "poza_sklepem", z tekstem z OCR).
 // Do Shopify idą tylko wiersze "sklep"; "poza_sklepem" są do wyjaśnienia (stary kod, materiał spoza sklepu, zły odczyt).
